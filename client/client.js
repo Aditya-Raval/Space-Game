@@ -117,12 +117,12 @@ function loop() {
     players.find(p => p.id === myId) || players[0];
 
   // ---- update trails (world space data) ----
-  for (const p of players) {
-    if (!trails.has(p.id)) trails.set(p.id, []);
-    const t = trails.get(p.id);
-    t.push({ x: p.x, y: p.y });
-    if (t.length > TRAIL_LENGTH) t.shift();
-  }
+//   for (const p of players) {
+//     if (!trails.has(p.id)) trails.set(p.id, []);
+//     const t = trails.get(p.id);
+//     t.push({ x: p.x, y: p.y });
+//     if (t.length > TRAIL_LENGTH) t.shift();
+//   }
 
   // ---- WORLD SPACE ----
   ctx.save();
