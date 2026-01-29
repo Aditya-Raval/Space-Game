@@ -8,13 +8,19 @@ import {
   MAX_SPEED,
   MAX_FUEL,
   FUEL_THRUST_COST,
-  FUEL_ROTATE_COST
+  FUEL_ROTATE_COST,
+  SHIP_RADIUS
 } from './shared/constants.js';
 
 import { MSG_INPUT, MSG_STATE } from './shared/messageTypes.js';
 
 const wss = new WebSocketServer({ port: 8080 });
 console.log("Server running on ws://localhost:8080");
+const planets = [
+  { id: "p1", x: 100, y: 300, r: 120 },
+  { id: "p2", x: 800, y: -400, r: 80 },
+  { id: "p3", x: -1000, y: 600, r: 150 }
+];
 
 const players = new Map();
 
@@ -33,6 +39,7 @@ wss.on("connection", ws => {
     vy: 0,
     rot: 0,
     fuel: MAX_FUEL,
+    on_planet : false,
     input: { thrust: false, rotate: 0, brake: false }
   };
 
@@ -53,6 +60,20 @@ wss.on("connection", ws => {
 });
 
 function updatePlayer(p) {
+  for (const planet of planets) {
+    const dx = planet.x - p.x;
+    const dy = planet.y - p.y;
+    const distSq = dx * dx + dy * dy;
+    const dist = Math.sqrt(distSq);
+
+    const G = 150000; // tweak later
+    const force = G / distSq;
+    if(dist < planet.r * 5){
+      p.vx += (dx / dist) * force * DT;
+      p.vy += (dy / dist) * force * DT;
+    } 
+  }
+
   /* ===== Rotation ===== */
   if (p.input.rotate !== 0 && p.fuel > 0) {
     p.rot += p.input.rotate * ROT_SPEED * DT;
@@ -91,6 +112,27 @@ function updatePlayer(p) {
   /* ===== Integrate position ===== */
   p.x += p.vx * DT;
   p.y += p.vy * DT;
+
+  for (const planet of planets) {
+  const dx = p.x - planet.x;
+  const dy = p.y - planet.y;
+  const dist = Math.hypot(dx, dy);
+
+  if (dist < planet.r + SHIP_RADIUS) {
+    // simple collision response
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    // push ship out
+    p.x = planet.x + nx * (planet.r + SHIP_RADIUS);
+    p.y = planet.y + ny * (planet.r + SHIP_RADIUS);
+    // kill velocity
+    p.vx = 0;
+    p.vy = 0;
+  
+  }
+}
+
 }
 
 /* ===== Fixed timestep loop ===== */
@@ -99,12 +141,15 @@ setInterval(() => {
     updatePlayer(p);
   }
 
-  const snapshot = Array.from(players.values()).map(p => ({
+  const snapshot = {
+    players : Array.from(players.values()).map(p => ({
     id: p.id,
     x: p.x,
     y: p.y,
     rot: p.rot
-  }));
+  })),
+  planets
+};
 
   const msg = JSON.stringify({
     type: MSG_STATE,

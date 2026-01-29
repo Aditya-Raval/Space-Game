@@ -4,6 +4,7 @@ console.log("CLIENT LOADED");
 
 let myId = null;
 let players = [];
+let planets = [];
 
 const canvas = document.getElementById("game");
 canvas.width = window.innerWidth;
@@ -54,7 +55,8 @@ socket.onmessage = e => {
   }
 
   if (msg.type === MSG_STATE) {
-    players = msg.payload;
+    players = msg.payload.players;
+    planets = msg.payload.planets;
   }
 };
 
@@ -76,6 +78,14 @@ function drawShip(p) {
   ctx.stroke();
 
   ctx.restore();
+}
+
+function drawPlanet(p) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.strokeStyle = "#4af";
+  ctx.lineWidth = 3;
+  ctx.stroke();
 }
 
 function drawTrail(playerId) {
@@ -130,16 +140,18 @@ function loop() {
     canvas.width / 2 - camTarget.x,
     canvas.height / 2 - camTarget.y
   );
-
-  // draw trails
-  for (const p of players) {
-    drawTrail(p.id);
-  }
+  for (const pl of planets) {
+  drawPlanet(pl);
+}
 
   // draw ships
   for (const p of players) {
     drawShip(p);
   }
+  //draw trails
+  // for (const p of players) {
+  //   drawTrail(p.id);
+  // }
 
   ctx.restore();
 
