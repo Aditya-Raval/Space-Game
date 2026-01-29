@@ -60,13 +60,38 @@ wss.on("connection", ws => {
 });
 
 function updatePlayer(p) {
+  if (p.on_planet) {
+    if (p.input.rotate !== 0 && p.fuel > 0) {
+      p.rot += p.input.rotate * ROT_SPEED * DT;
+      p.fuel -= FUEL_ROTATE_COST * DT;
+    }
+
+    if (p.on_planet && p.input.thrust && p.fuel > 0) {
+      const planet = planets.find(pl => pl.id === p.landedOn);
+
+      const dx = p.x - planet.x;
+      const dy = p.y - planet.y;
+      const len = Math.hypot(dx, dy);
+
+      // impulse away from surface
+      p.vx += (dx / len) * 6;
+      p.vy += (dy / len) * 6;
+
+      p.on_planet = false;
+      p.landedOn = null;
+      p.fuel -= FUEL_THRUST_COST * 5;
+    }
+
+    return;
+  }
+
   for (const planet of planets) {
     const dx = planet.x - p.x;
     const dy = planet.y - p.y;
     const distSq = dx * dx + dy * dy;
     const dist = Math.sqrt(distSq);
 
-    const G = 150000; // tweak later
+    const G = 50000; // tweak later
     const force = G / distSq;
     if(dist < planet.r * 5){
       p.vx += (dx / dist) * force * DT;
@@ -114,26 +139,38 @@ function updatePlayer(p) {
   p.y += p.vy * DT;
 
   for (const planet of planets) {
-  const dx = p.x - planet.x;
-  const dy = p.y - planet.y;
-  const dist = Math.hypot(dx, dy);
+    const dx = p.x - planet.x;
+    const dy = p.y - planet.y;
+    const dist = Math.hypot(dx, dy);
+    const minDist = planet.r + SHIP_RADIUS;
 
-  if (dist < planet.r + SHIP_RADIUS) {
-    // simple collision response
-    const nx = dx / dist;
-    const ny = dy / dist;
+    if (dist < minDist) {
+      const nx = dx / dist;
+      const ny = dy / dist;
 
-    // push ship out
-    p.x = planet.x + nx * (planet.r + SHIP_RADIUS);
-    p.y = planet.y + ny * (planet.r + SHIP_RADIUS);
-    // kill velocity
-    p.vx = 0;
-    p.vy = 0;
-  
+      // push out
+      p.x = planet.x + nx * minDist;
+      p.y = planet.y + ny * minDist;
+
+      // remove only inward velocity
+      const vDotN = p.vx * nx + p.vy * ny;
+      if (vDotN < 0) {
+        p.vx -= vDotN * nx;
+        p.vy -= vDotN * ny;
+      }
+
+      // ---- landing check ----
+      const speed = Math.hypot(p.vx, p.vy);
+      if (speed < 0.5 && !p.input.thrust) {
+        p.on_planet = true;
+        p.landedOn = planet.id;
+      }
+    }
   }
-}
 
 }
+
+
 
 /* ===== Fixed timestep loop ===== */
 setInterval(() => {
