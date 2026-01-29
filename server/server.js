@@ -99,20 +99,20 @@ function updatePlayer(p) {
     } 
   }
 
-  /* ===== Rotation ===== */
+  //Rotation
   if (p.input.rotate !== 0 && p.fuel > 0) {
     p.rot += p.input.rotate * ROT_SPEED * DT;
     p.fuel -= FUEL_ROTATE_COST * DT;
   }
 
-  /* ===== Thrust ===== */
+  //Thrust
   if (p.input.thrust && p.fuel > 0) {
     p.vx += Math.cos(p.rot) * THRUST * DT;
     p.vy += Math.sin(p.rot) * THRUST * DT;
     p.fuel -= FUEL_THRUST_COST * DT;
   }
 
-  /* ===== Braking (hard stop) ===== */
+  //Braking
   if (p.input.brake) {
     const speed = Math.hypot(p.vx, p.vy);
     if (speed > 0) {
@@ -127,14 +127,14 @@ function updatePlayer(p) {
     }
   }
 
-  /* ===== Clamp max speed ===== */
+  //Clamp max speed
   const speed = Math.hypot(p.vx, p.vy);
   if (speed > MAX_SPEED) {
     p.vx = (p.vx / speed) * MAX_SPEED;
     p.vy = (p.vy / speed) * MAX_SPEED;
   }
 
-  /* ===== Integrate position ===== */
+  //Integrate position
   p.x += p.vx * DT;
   p.y += p.vy * DT;
 
@@ -159,7 +159,7 @@ function updatePlayer(p) {
         p.vy -= vDotN * ny;
       }
 
-      // ---- landing check ----
+      //landing check
       const speed = Math.hypot(p.vx, p.vy);
       if (speed < 0.5 && !p.input.thrust) {
         p.on_planet = true;
