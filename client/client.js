@@ -1,4 +1,5 @@
 import { MSG_INPUT, MSG_STATE } from "./shared/messageTypes.js";
+import { MAX_FUEL } from "./shared/constants.js";
 
 console.log("CLIENT LOADED");
 
@@ -7,9 +8,17 @@ let players = [];
 let planets = [];
 
 const canvas = document.getElementById("game");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+let myFuel = MAX_FUEL;
 const ctx = canvas.getContext("2d");
+
+// Responsive canvas sizing
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
 
 // networking
 const socket = new WebSocket("ws://localhost:8080");
@@ -53,6 +62,12 @@ socket.onmessage = e => {
   if (msg.type === MSG_STATE) {
     players = msg.payload.players;
     planets = msg.payload.planets;
+    
+    // Update my fuel
+    const myPlayer = players.find(p => p.id === myId);
+    if (myPlayer) {
+      myFuel = myPlayer.fuel;
+    }
   }
 };
 
@@ -84,7 +99,6 @@ function drawPlanet(p) {
   ctx.stroke();
 }
 
-\
 // ================= MAIN LOOP =================
 
 function loop() {
@@ -95,17 +109,28 @@ function loop() {
   ctx.font = "18px monospace";
   ctx.fillText(`PLAYERS: ${players.length}`, 20, 30);
   ctx.fillText(`MY ID: ${myId ?? "null"}`, 20, 55);
+  
+  // Fuel bar
+  const fuelPercentage = (myFuel / MAX_FUEL) * 100;
+  ctx.fillStyle = fuelPercentage > 25 ? "#0f0" : "#f00";
+  ctx.fillText(`FUEL: ${myFuel.toFixed(1)}/${MAX_FUEL}`, 20, 80);
+  
+  // Fuel bar visual
+  ctx.strokeStyle = "#0f0";
+  ctx.strokeRect(20, 90, 200, 20);
+  ctx.fillStyle = fuelPercentage > 25 ? "#0f0" : "#f00";
+  ctx.fillRect(20, 90, (fuelPercentage / 100) * 200, 20);
 
   if (players.length === 0) {
     requestAnimationFrame(loop);
     return;
   }
 
-  // camera target (safe fallback)
+  // camera target
   const camTarget =
     players.find(p => p.id === myId) || players[0];
 
-  // ---- WORLD SPACE ----
+  // WORLD SPACE 
   ctx.save();
   ctx.translate(
     canvas.width / 2 - camTarget.x,
