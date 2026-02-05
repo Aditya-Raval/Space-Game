@@ -8,6 +8,22 @@
   </style>
 </head>
 <body>
+  <div id="login-root" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+    <form id="auth-form" style="background:#000; padding:20px; border:1px solid #444; color:white;">
+      <h3 style="margin:0 0 10px 0">Login or Register</h3>
+      <div>
+        <input id="username" placeholder="Username" style="width:200px;padding:6px;margin-bottom:6px;" />
+      </div>
+      <div>
+        <input id="password" type="password" placeholder="Password" style="width:200px;padding:6px;margin-bottom:6px;" />
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button id="btn-login" type="button">Login</button>
+        <button id="btn-register" type="button">Register</button>
+      </div>
+      <div id="auth-msg" style="color:#f88;margin-top:8px"></div>
+    </form>
+  </div>
   <canvas id="game" width="800" height="600"></canvas>
   <script type="module" src="client.js"></script>
 </body>

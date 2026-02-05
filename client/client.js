@@ -6,6 +6,50 @@ console.log("CLIENT LOADED");
 let myId = null;
 let players = [];
 let planets = [];
+let myName = null;
+let myCredits = 0;
+
+// ===== Auth UI handlers =====
+async function doAuth(action) {
+  const userEl = document.getElementById('username');
+  const passEl = document.getElementById('password');
+  const msgEl = document.getElementById('auth-msg');
+  const username = userEl?.value?.trim();
+  const password = passEl?.value || '';
+  if (!username || !password) {
+    if (msgEl) msgEl.textContent = 'Please enter username and password';
+    return;
+  }
+
+  try {
+    const res = await fetch(`http://localhost:3000/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      if (msgEl) msgEl.textContent = data.error || 'Auth failed';
+      return;
+    }
+
+    // success: data contains playerId and username
+    myName = data.username || username;
+    if (msgEl) msgEl.textContent = 'Authenticated, connecting...';
+    connectSocket(data.playerId);
+  } catch (err) {
+    const msgEl2 = document.getElementById('auth-msg');
+    if (msgEl2) msgEl2.textContent = 'Auth server unreachable';
+    console.error('Auth error', err);
+  }
+}
+
+// Attach handlers to buttons if present
+const loginBtn = document.getElementById('btn-login');
+const registerBtn = document.getElementById('btn-register');
+if (loginBtn) loginBtn.addEventListener('click', () => doAuth('login'));
+if (registerBtn) registerBtn.addEventListener('click', () => doAuth('register'));
 
 const canvas = document.getElementById("game");
 let myFuel = MAX_FUEL;
@@ -21,7 +65,25 @@ resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
 
 // networking
-const socket = new WebSocket("ws://localhost:8080");
+let socket = null;
+
+function connectSocket(playerId) {
+  socket = new WebSocket("ws://localhost:8080");
+  socket.onopen = () => {
+    console.log("WS CONNECTED");
+    // authenticate over WS
+    socket.send(JSON.stringify({ type: 'auth', payload: { playerId } }));
+    setInterval(() => {
+      if (socket.readyState === 1) {
+        socket.send(JSON.stringify({
+          type: MSG_INPUT,
+          payload: input
+        }));
+      }
+    }, 50);
+  };
+  socket.onmessage = socketOnMessage;
+}
 
 // input
 const input = { thrust: false, rotate: 0 };
@@ -41,35 +103,31 @@ window.addEventListener("keyup", e => {
 
 // ================= NETWORK =================
 
-socket.onopen = () => {
-  console.log("WS CONNECTED");
-  setInterval(() => {
-    socket.send(JSON.stringify({
-      type: MSG_INPUT,
-      payload: input
-    }));
-  }, 50);
-};
-
-socket.onmessage = e => {
+function socketOnMessage(e) {
   const msg = JSON.parse(e.data);
 
   if (msg.type === "init") {
     myId = msg.id;
+    myName = msg.username || myId;
     console.log("MY ID:", myId);
+    // hide login
+    document.getElementById('login-root').style.display = 'none';
   }
 
   if (msg.type === MSG_STATE) {
     players = msg.payload.players;
     planets = msg.payload.planets;
     
-    // Update my fuel
+    // Update my fuel and credits
     const myPlayer = players.find(p => p.id === myId);
     if (myPlayer) {
       myFuel = myPlayer.fuel;
+      myCredits = myPlayer.credits;
+      myName = myPlayer.username || myName;
     }
   }
-};
+}
+
 
 // ================= RENDER HELPERS =================
 
@@ -109,17 +167,21 @@ function loop() {
   ctx.font = "18px monospace";
   ctx.fillText(`PLAYERS: ${players.length}`, 20, 30);
   ctx.fillText(`MY ID: ${myId ?? "null"}`, 20, 55);
+  ctx.fillText(`USER: ${myName ?? "guest"}`, 20, 100);
+  ctx.fillText(`CREDITS: ${myCredits}`, 20, 125);
   
-  // Fuel bar
+  // Fuel bar visual (drawn first)
   const fuelPercentage = (myFuel / MAX_FUEL) * 100;
-  ctx.fillStyle = fuelPercentage > 25 ? "#0f0" : "#f00";
-  ctx.fillText(`FUEL: ${myFuel.toFixed(1)}/${MAX_FUEL}`, 20, 80);
-  
-  // Fuel bar visual
   ctx.strokeStyle = "#0f0";
   ctx.strokeRect(20, 90, 200, 20);
   ctx.fillStyle = fuelPercentage > 25 ? "#0f0" : "#f00";
   ctx.fillRect(20, 90, (fuelPercentage / 100) * 200, 20);
+
+  // Draw fuel and credits text on top of the bar
+  ctx.fillStyle = "white";
+  ctx.fillText(`FUEL: ${myFuel.toFixed(1)}/${MAX_FUEL}`, 20, 80);
+  ctx.fillStyle = "#0f0"; // credits in green with $ prefix
+  ctx.fillText(`CREDITS: $${myCredits}`, 20, 125);
 
   if (players.length === 0) {
     requestAnimationFrame(loop);

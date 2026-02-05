@@ -7,11 +7,31 @@ const playerSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  username: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  passwordHash: {
+    type: String
+  },
   fuel: {
     type: Number,
     default: 100
   },
   credits: {
+    type: Number,
+    default: 10000
+  },
+  x: {
+    type: Number,
+    default: 0
+  },
+  y: {
+    type: Number,
+    default: 0
+  },
+  rot: {
     type: Number,
     default: 0
   },

@@ -19,6 +19,8 @@ import { Planet } from './models/Planet.js';
 
 const wss = new WebSocketServer({ port: 8080 });
 console.log("Server running on ws://localhost:8080");
+import { startAuthServer } from "./auth.js";
+startAuthServer();
 const planets = [
   { id: "p1", x: 100, y: 300, r: 120, name: "Terra" },
   { id: "p2", x: 800, y: -400, r: 80, name: "Mars" },
@@ -57,53 +59,68 @@ async function initializeGame() {
 }
 
 wss.on("connection", async ws => {
-  const id = makeId();
+  // Expect first message to be auth: { type: 'auth', payload: { playerId } }
+  let player = null;
 
-  // Load or create player in DB
-  let dbPlayer = await Player.findOne({ playerId: id });
-  if (!dbPlayer) {
-    dbPlayer = await Player.create({
-      playerId: id,
-      fuel: MAX_FUEL,
-      credits: 0
-    });
-  }
+  const authTimeout = setTimeout(() => {
+    if (!player) ws.close();
+  }, 5000);
 
-  const player = {
-    id,
-    x: 0,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    rot: 0,
-    fuel: dbPlayer.fuel,
-    credits: dbPlayer.credits,
-    on_planet : false,
-    input: { thrust: false, rotate: 0, brake: false }
-  };
-
-  players.set(ws, player);
-
-  ws.send(JSON.stringify({ type: "init", id }));
-
-  ws.on("message", data => {
+  ws.on("message", async data => {
     const msg = JSON.parse(data);
+    if (msg.type === "auth") {
+      clearTimeout(authTimeout);
+      const { playerId } = msg.payload;
+      let dbPlayer = await Player.findOne({ playerId });
+      if (!dbPlayer) {
+        // unknown player, reject
+        ws.send(JSON.stringify({ type: "auth_fail" }));
+        ws.close();
+        return;
+      }
+
+      player = {
+        id: dbPlayer.playerId,
+        username: dbPlayer.username,
+        x: dbPlayer.x || 0,
+        y: dbPlayer.y || 0,
+        vx: 0,
+        vy: 0,
+        rot: dbPlayer.rot || 0,
+        fuel: dbPlayer.fuel,
+        credits: dbPlayer.credits,
+        on_planet : false,
+        input: { thrust: false, rotate: 0, brake: false }
+      };
+
+      players.set(ws, player);
+      ws.send(JSON.stringify({ type: "init", id: player.id, username: player.username }));
+      return;
+    }
+
+    if (!player) return; // ignore until authed
+
     if (msg.type === MSG_INPUT) {
       player.input = msg.payload;
     }
   });
 
   ws.on("close", async () => {
-    // Save player data to DB on disconnect
-    await Player.findOneAndUpdate(
-      { playerId: player.id },
-      {
-        fuel: player.fuel,
-        credits: player.credits,
-        lastUpdated: new Date()
-      }
-    );
-    players.delete(ws);
+    if (player) {
+      // Save player data to DB on disconnect
+      await Player.findOneAndUpdate(
+        { playerId: player.id },
+        {
+          fuel: player.fuel,
+          credits: player.credits,
+          x: player.x,
+          y: player.y,
+          rot: player.rot,
+          lastUpdated: new Date()
+        }
+      );
+      players.delete(ws);
+    }
   });
 });
 
@@ -249,6 +266,24 @@ setInterval(() => {
     }
   }
 }, 1000 / TICK_RATE);
+
+// Periodic save of all connected players' position and state every 5s
+setInterval(async () => {
+  for (const p of players.values()) {
+    try {
+      await Player.findOneAndUpdate({ playerId: p.id }, {
+        x: p.x,
+        y: p.y,
+        rot: p.rot,
+        fuel: p.fuel,
+        credits: p.credits,
+        lastUpdated: new Date()
+      });
+    } catch (err) {
+      console.error("Failed to save player state:", err.message);
+    }
+  }
+}, 5000);
 
 // Initialize game on startup
 initializeGame().catch(err => {

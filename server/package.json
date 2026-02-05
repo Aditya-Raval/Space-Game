@@ -1,7 +1,10 @@
 {
   "type": "module",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "body-parser": "^2.2.2",
     "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "mongoose": "^9.1.6",
     "ws": "^8.19.0"
   }
