@@ -53,7 +53,7 @@ async function initializeGame() {
       });
     }
   }
-  console.log("✓ Game initialized");
+  console.log("Game initialized");
 }
 
 wss.on("connection", async ws => {
