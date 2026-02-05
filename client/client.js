@@ -17,10 +17,6 @@ const socket = new WebSocket("ws://localhost:8080");
 // input
 const input = { thrust: false, rotate: 0 };
 
-// trails: playerId -> [{x,y}]
-const trails = new Map();
-const TRAIL_LENGTH = 25;
-
 // ================= INPUT =================
 
 window.addEventListener("keydown", e => {
@@ -88,24 +84,7 @@ function drawPlanet(p) {
   ctx.stroke();
 }
 
-function drawTrail(playerId) {
-  const t = trails.get(playerId);
-  if (!t || t.length < 2) return;
-
-  ctx.beginPath();
-  ctx.moveTo(t[0].x, t[0].y);
-  for (let i = 1; i < t.length; i++) {
-    ctx.lineTo(t[i].x, t[i].y);
-  }
-
-  ctx.strokeStyle =
-    playerId === myId
-      ? "rgba(0,255,255,0.5)"
-      : "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
+\
 // ================= MAIN LOOP =================
 
 function loop() {
@@ -126,14 +105,6 @@ function loop() {
   const camTarget =
     players.find(p => p.id === myId) || players[0];
 
-  // ---- update trails (world space data) ----
-//   for (const p of players) {
-//     if (!trails.has(p.id)) trails.set(p.id, []);
-//     const t = trails.get(p.id);
-//     t.push({ x: p.x, y: p.y });
-//     if (t.length > TRAIL_LENGTH) t.shift();
-//   }
-
   // ---- WORLD SPACE ----
   ctx.save();
   ctx.translate(
@@ -148,10 +119,6 @@ function loop() {
   for (const p of players) {
     drawShip(p);
   }
-  //draw trails
-  // for (const p of players) {
-  //   drawTrail(p.id);
-  // }
 
   ctx.restore();
 
