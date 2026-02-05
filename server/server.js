@@ -13,13 +13,21 @@ import {
 } from './shared/constants.js';
 
 import { MSG_INPUT, MSG_STATE } from './shared/messageTypes.js';
+import { connectDB } from './db/connection.js';
+import { Player } from './models/Player.js';
+import { Planet } from './models/Planet.js';
 
 const wss = new WebSocketServer({ port: 8080 });
 console.log("Server running on ws://localhost:8080");
 const planets = [
-  { id: "p1", x: 100, y: 300, r: 120 },
-  { id: "p2", x: 800, y: -400, r: 80 },
-  { id: "p3", x: -1000, y: 600, r: 150 }
+  { id: "p1", x: 100, y: 300, r: 120, name: "Terra" },
+  { id: "p2", x: 800, y: -400, r: 80, name: "Mars" },
+  { id: "p3", x: -1000, y: 600, r: 150, name: "Jupiter" },
+  { id: "p4", x: 1200, y: 800, r: 90, name: "Venus" },
+  { id: "p5", x: -600, y: -500, r: 70, name: "Mercury" },
+  { id: "p6", x: 500, y: -1200, r: 110, name: "Saturn" },
+  { id: "p7", x: -200, y: 1000, r: 65, name: "Uranus" },
+  { id: "p8", x: 1500, y: 200, r: 95, name: "Neptune" }
 ];
 
 const players = new Map();
@@ -28,8 +36,38 @@ function makeId() {
   return Math.random().toString(36).slice(2);
 }
 
-wss.on("connection", ws => {
+// Initialize DB and planets on startup
+async function initializeGame() {
+  await connectDB();
+  
+  // Initialize planets in DB if not exist
+  for (const planet of planets) {
+    const existingPlanet = await Planet.findOne({ planetId: planet.id });
+    if (!existingPlanet) {
+      await Planet.create({
+        planetId: planet.id,
+        name: planet.name,
+        x: planet.x,
+        y: planet.y,
+        r: planet.r
+      });
+    }
+  }
+  console.log("✓ Game initialized");
+}
+
+wss.on("connection", async ws => {
   const id = makeId();
+
+  // Load or create player in DB
+  let dbPlayer = await Player.findOne({ playerId: id });
+  if (!dbPlayer) {
+    dbPlayer = await Player.create({
+      playerId: id,
+      fuel: MAX_FUEL,
+      credits: 0
+    });
+  }
 
   const player = {
     id,
@@ -38,7 +76,8 @@ wss.on("connection", ws => {
     vx: 0,
     vy: 0,
     rot: 0,
-    fuel: MAX_FUEL,
+    fuel: dbPlayer.fuel,
+    credits: dbPlayer.credits,
     on_planet : false,
     input: { thrust: false, rotate: 0, brake: false }
   };
@@ -54,7 +93,16 @@ wss.on("connection", ws => {
     }
   });
 
-  ws.on("close", () => {
+  ws.on("close", async () => {
+    // Save player data to DB on disconnect
+    await Player.findOneAndUpdate(
+      { playerId: player.id },
+      {
+        fuel: player.fuel,
+        credits: player.credits,
+        lastUpdated: new Date()
+      }
+    );
     players.delete(ws);
   });
 });
@@ -91,7 +139,7 @@ function updatePlayer(p) {
     const distSq = dx * dx + dy * dy;
     const dist = Math.sqrt(distSq);
 
-    const G = 50000; // tweak later
+    const G = 50000; // tweak till gravity feels
     const force = G / distSq;
     if(dist < planet.r * 5){
       p.vx += (dx / dist) * force * DT;
@@ -183,7 +231,9 @@ setInterval(() => {
     id: p.id,
     x: p.x,
     y: p.y,
-    rot: p.rot
+    rot: p.rot,
+    fuel: p.fuel,
+    credits: p.credits
   })),
   planets
 };
@@ -199,3 +249,9 @@ setInterval(() => {
     }
   }
 }, 1000 / TICK_RATE);
+
+// Initialize game on startup
+initializeGame().catch(err => {
+  console.error("Failed to initialize game:", err);
+  process.exit(1);
+});
