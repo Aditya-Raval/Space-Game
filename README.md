@@ -1,4 +1,4 @@
-# Project README
+# SPACE GAME
 
 ## Context
 
@@ -6,8 +6,7 @@ This project was developed as part of the **CS2062 Laboratory Course** at **Nati
 
 ## Objective
 
-The goal of this project is to demonstrate practical understanding of the concepts taught in the CS2062 course through a working implementation.
-The focus is on applying theoretical principles to a functional system rather than producing a production-ready product.
+Players will spawn into a world with their ships. Each player has resources FUEL and Credits. Player has to manage these resources and conquer planets. Visiting a planet will give the player option to claim it with some credits. Players visiting the already claimed planets has to pay the owner some amount and to stay on the planet and can refuel by paying some more credits. Players are also charged timed costs of maintaining their planets. The physics are realistic with implementation of Gravity and Simple concepts like Inertia. 
 
 ## Project Goal
 
@@ -22,18 +21,6 @@ The project aims to:
 ## Scope
 
 This repository is intended only for academic demonstration and evaluation purposes.
-
-## Features Demonstrated
-
-* Concept implementation from CS2062 syllabus
-* Logical correctness over optimization
-* Clear separation of components
-* Traceable input–process–output behaviour
-
-## Evaluation Intent
-
-The project should be read as a proof of understanding rather than a polished software product.
-All design decisions prioritize clarity and academic demonstration.
 
 ## Academic Note
 
