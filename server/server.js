@@ -178,7 +178,7 @@ function updatePlayer(p) {
   }
 
   //Braking
-  if (p.input.brake) {
+  if (p.input.brake && p.fuel > 0) {
     const speed = Math.hypot(p.vx, p.vy);
     if (speed > 0) {
       const decel = BRAKE * DT;
@@ -188,6 +188,7 @@ function updatePlayer(p) {
       } else {
         p.vx -= (p.vx / speed) * decel;
         p.vy -= (p.vy / speed) * decel;
+        sp.fuel -= FUEL_THRUST_COST * DT;
       }
     }
   }
