@@ -169,21 +169,19 @@ function loop() {
   ctx.font = "18px monospace";
   ctx.fillText(`PLAYERS: ${players.length}`, 20, 30);
   ctx.fillText(`MY ID: ${myId ?? "null"}`, 20, 55);
-  ctx.fillText(`USER: ${myName ?? "guest"}`, 20, 100);
-  ctx.fillText(`CREDITS: ${myCredits}`, 20, 125);
-  
+  ctx.fillText(`USER: ${myName ?? "guest"}`, 20, 80);
   // Fuel bar visual (drawn first)
   const fuelPercentage = (myFuel / MAX_FUEL) * 100;
   ctx.strokeStyle = "#0f0";
-  ctx.strokeRect(20, 90, 200, 20);
-  ctx.fillStyle = fuelPercentage > 25 ? "#0f0" : "#f00";
-  ctx.fillRect(20, 90, (fuelPercentage / 100) * 200, 20);
+  ctx.strokeRect(20, 95, 200, 20);
+  ctx.fillStyle = fuelPercentage > 25 ? "hsl(120, 100%, 39%)" : "#f00";
+  ctx.fillRect(20, 95, (fuelPercentage / 100) * 200, 20);
 
   // Draw fuel and credits text on top of the bar
   ctx.fillStyle = "white";
-  ctx.fillText(`FUEL: ${myFuel.toFixed(1)}/${MAX_FUEL}`, 20, 80);
-  ctx.fillStyle = "#0f0"; // credits in green with $ prefix
-  ctx.fillText(`CREDITS: $${myCredits}`, 20, 125);
+  ctx.fillText(`FUEL: ${myFuel.toFixed(1)}/${MAX_FUEL}`, 40, 110);
+  ctx.fillStyle = "hsl(120, 100%, 45%)"; // credits in green with $ prefix
+  ctx.fillText(`CREDITS: $${myCredits}`, 20, 140);
 
   if (players.length === 0) {
     requestAnimationFrame(loop);

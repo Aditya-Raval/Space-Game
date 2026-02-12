@@ -188,7 +188,7 @@ function updatePlayer(p) {
       } else {
         p.vx -= (p.vx / speed) * decel;
         p.vy -= (p.vy / speed) * decel;
-        sp.fuel -= FUEL_THRUST_COST * DT;
+        p.fuel -= FUEL_THRUST_COST * DT;
       }
     }
   }
