@@ -156,7 +156,7 @@ function updatePlayer(p) {
     const distSq = dx * dx + dy * dy;
     const dist = Math.sqrt(distSq);
 
-    const G = 50000; // tweak till gravity feels
+    const G = 500*planet.r; // gravity scaled to planet size
     const force = G / distSq;
     if(dist < planet.r * 5){
       p.vx += (dx / dist) * force * DT;
