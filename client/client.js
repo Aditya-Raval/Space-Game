@@ -94,11 +94,13 @@ window.addEventListener("keydown", e => {
   if (e.key === "w") input.thrust = true;
   if (e.key === "a") input.rotate = -1;
   if (e.key === "d") input.rotate = 1;
+  if (e.key === "s") input.brake = true;
 });
 
 window.addEventListener("keyup", e => {
   if (e.key === "w") input.thrust = false;
   if (e.key === "a" || e.key === "d") input.rotate = 0;
+  if (e.key === "s") input.brake = false;
 });
 
 // ================= NETWORK =================
