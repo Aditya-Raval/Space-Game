@@ -35,13 +35,9 @@ const playerSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  planetOwnership: [
+  ownedPlanets: [
     {
-      planetId: String,
-      owned: {
-        type: Boolean,
-        default: false
-      }
+      type: String
     }
   ],
   createdAt: {

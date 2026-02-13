@@ -3,25 +3,100 @@
 <head>
   <title>Space Game</title>
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
-    canvas { display: block; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: #000;
+      color: white;
+      font-family: monospace;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      background: #000;
+    }
+
+    #login-root {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      z-index: 2000;
+    }
+
+    #auth-form {
+      background: #000;
+      padding: 20px;
+      border: 1px solid #fff;
+      min-width: 300px;
+    }
+
+    #auth-form h3 {
+      margin-bottom: 15px;
+      color: #fff;
+      font-size: 16px;
+    }
+
+    #auth-form input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      background: #000;
+      color: #fff;
+      border: 1px solid #fff;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    #auth-form button {
+      flex: 1;
+      padding: 8px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #fff;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: monospace;
+      font-weight: bold;
+    }
+
+    #auth-form button:hover {
+      background: #ccc;
+    }
+
+    #auth-form > div:nth-child(3) {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    #auth-msg {
+      color: #f00;
+      margin-top: 10px;
+      text-align: center;
+      font-size: 12px;
+      min-height: 16px;
+    }
   </style>
 </head>
 <body>
-  <div id="login-root" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
-    <form id="auth-form" style="background:#000; padding:20px; border:1px solid #444; color:white;">
-      <h3 style="margin:0 0 10px 0">Login or Register</h3>
+  <div id="login-root">
+    <form id="auth-form">
+      <h3>SPACE GAME</h3>
+      <input id="username" placeholder="Username" autocomplete="off" />
+      <input id="password" type="password" placeholder="Password" />
       <div>
-        <input id="username" placeholder="Username" style="width:200px;padding:6px;margin-bottom:6px;" />
+        <button id="btn-login" type="button" style="flex:1;">Login</button>
+        <button id="btn-register" type="button" style="flex:1;">Register</button>
       </div>
-      <div>
-        <input id="password" type="password" placeholder="Password" style="width:200px;padding:6px;margin-bottom:6px;" />
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button id="btn-login" type="button">Login</button>
-        <button id="btn-register" type="button">Register</button>
-      </div>
-      <div id="auth-msg" style="color:#f88;margin-top:8px"></div>
+      <div id="auth-msg"></div>
     </form>
   </div>
   <canvas id="game" width="800" height="600"></canvas>

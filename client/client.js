@@ -1,5 +1,5 @@
-import { MSG_INPUT, MSG_STATE } from "./shared/messageTypes.js";
-import { MAX_FUEL } from "./shared/constants.js";
+import { MSG_INPUT, MSG_STATE, MSG_CLAIM_PLANET, MSG_CLAIM_RESPONSE, MSG_REFUEL, MSG_REFUEL_RESPONSE, MSG_REVOKE_PLANET, MSG_LANDING_PROMPT } from "./shared/messageTypes.js";
+import { MAX_FUEL, PLANET_CLAIM_COST, FREE_REFUEL_AMOUNT, PAID_REFUEL_AMOUNT, REFUEL_COST_PER_TANK } from "./shared/constants.js";
 
 console.log("CLIENT LOADED");
 
@@ -8,6 +8,8 @@ let players = [];
 let planets = [];
 let myName = null;
 let myCredits = 0;
+let landingPrompt = null;
+let ownedPlanets = [];
 
 // ===== Auth UI handlers =====
 async function doAuth(action) {
@@ -16,12 +18,14 @@ async function doAuth(action) {
   const msgEl = document.getElementById('auth-msg');
   const username = userEl?.value?.trim();
   const password = passEl?.value || '';
+  
   if (!username || !password) {
     if (msgEl) msgEl.textContent = 'Please enter username and password';
     return;
   }
 
   try {
+    console.log(`Attempting to ${action}...`);
     const res = await fetch(`http://localhost:3000/${action}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -29,6 +33,8 @@ async function doAuth(action) {
     });
 
     const data = await res.json();
+    console.log(`${action} response:`, data);
+    
     if (!res.ok) {
       if (msgEl) msgEl.textContent = data.error || 'Auth failed';
       return;
@@ -39,17 +45,27 @@ async function doAuth(action) {
     if (msgEl) msgEl.textContent = 'Authenticated, connecting...';
     connectSocket(data.playerId);
   } catch (err) {
-    const msgEl2 = document.getElementById('auth-msg');
-    if (msgEl2) msgEl2.textContent = 'Auth server unreachable';
     console.error('Auth error', err);
+    const msgEl2 = document.getElementById('auth-msg');
+    if (msgEl2) msgEl2.textContent = 'Auth failed: ' + err.message;
   }
 }
 
-// Attach handlers to buttons if present
+// Attach handlers to buttons with preventDefault
 const loginBtn = document.getElementById('btn-login');
 const registerBtn = document.getElementById('btn-register');
-if (loginBtn) loginBtn.addEventListener('click', () => doAuth('login'));
-if (registerBtn) registerBtn.addEventListener('click', () => doAuth('register'));
+if (loginBtn) {
+  loginBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    doAuth('login');
+  });
+}
+if (registerBtn) {
+  registerBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    doAuth('register');
+  });
+}
 
 const canvas = document.getElementById("game");
 let myFuel = MAX_FUEL;
@@ -128,10 +144,161 @@ function socketOnMessage(e) {
       myName = myPlayer.username || myName;
     }
   }
+
+  if (msg.type === MSG_LANDING_PROMPT) {
+    landingPrompt = msg;
+    showLandingPrompt(msg);
+  }
+
+  if (msg.type === MSG_CLAIM_RESPONSE) {
+    if (msg.success) {
+      if (msg.planetId) ownedPlanets.push(msg.planetId);
+      showNotification(msg.message || "Success!", "green");
+      if (landingPrompt) landingPrompt = null;
+    } else {
+      showNotification(msg.error, "red");
+    }
+  }
+
+  if (msg.type === MSG_REFUEL_RESPONSE) {
+    if (msg.success) {
+      myFuel = msg.newFuel;
+      showNotification(`Refueled +${msg.fuelAmount}. Cost: $${msg.costDeducted.toFixed(2)}`, msg.costDeducted > 0 ? "yellow" : "green");
+    } else {
+      showNotification(msg.error, "red");
+    }
+  }
 }
 
 
 // ================= RENDER HELPERS =================
+
+function showNotification(text, color = "white") {
+  const notif = document.createElement("div");
+  notif.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #000;
+    color: ${color};
+    padding: 10px 15px;
+    border: 1px solid ${color};
+    z-index: 1000;
+    font-family: monospace;
+    font-size: 12px;
+  `;
+  notif.textContent = text;
+  document.body.appendChild(notif);
+  setTimeout(() => notif.remove(), 3000);
+}
+
+function showLandingPrompt(prompt) {
+  // Remove existing prompt if any
+  const existing = document.getElementById("landing-dialog");
+  if (existing) existing.remove();
+
+  // Safely handle credits - use currentCredits from server, fallback to myCredits
+  const credits = typeof prompt.currentCredits === 'number' ? prompt.currentCredits : (typeof myCredits === 'number' ? myCredits : 0);
+  const creditsDisplay = `$${Math.floor(credits)}`;
+
+  const dialog = document.createElement("div");
+  dialog.id = "landing-dialog";
+  dialog.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #000;
+    border: 1px solid #fff;
+    padding: 15px;
+    z-index: 999;
+    min-width: 250px;
+    font-family: monospace;
+    color: #fff;
+  `;
+
+  let content = `<div style="margin-bottom: 10px;"><strong>${prompt.planetName}</strong></div>`;
+  
+  if (prompt.isOwned && prompt.isOwner) {
+    content += `<div style="font-size:12px;margin-bottom:10px;">Your planet - Free refuel available</div>
+                <button id="btn-refuel-own" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#0f0;border:1px solid #0f0;cursor:pointer;">Refuel Free</button>
+                <button id="btn-revoke" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#f00;border:1px solid #f00;cursor:pointer;">Revoke</button>`;
+  } else if (prompt.isOwned && !prompt.isOwner) {
+    content += `<div style="font-size:12px;margin-bottom:10px;">Owned by: ${prompt.owner} | Rent: $${prompt.rentPaid}</div>
+                <div style="font-size:12px;margin-bottom:10px;color:#ff0;">Credits: ${creditsDisplay}</div>
+                <button id="btn-refuel-paid" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#ff0;border:1px solid #ff0;cursor:pointer;">Refuel $${REFUEL_COST_PER_TANK}</button>`;
+  } else {
+    const canClaim = credits >= prompt.claimCost;
+    content += `<div style="font-size:12px;margin-bottom:10px;">Unclaimed - Claim for $${prompt.claimCost}</div>`;
+    content += `<div style="font-size:12px;margin-bottom:10px;color:#ff0;">Credits: ${creditsDisplay}</div>`;
+    if (canClaim) {
+      content += `<button id="btn-claim" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#0f0;border:1px solid #0f0;cursor:pointer;">Claim Planet</button>`;
+    } else {
+      content += `<div style="font-size:12px;color:#f00;margin-bottom:5px;">Need $${prompt.claimCost - Math.floor(credits)} more</div>`;
+    }
+    content += `<button id="btn-refuel-paid" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#ff0;border:1px solid #ff0;cursor:pointer;">Refuel $${REFUEL_COST_PER_TANK}</button>`;
+  }
+
+  content += `<button id="btn-close" style="width:100%;padding:5px;background:#000;color:#aaa;border:1px solid #aaa;cursor:pointer;">Close</button>`;
+  dialog.innerHTML = content;
+  document.body.appendChild(dialog);
+
+  // Attach event listeners
+  const btnClaim = document.getElementById("btn-claim");
+  if (btnClaim) {
+    btnClaim.addEventListener("click", () => {
+      socket.send(JSON.stringify({
+        type: MSG_CLAIM_PLANET,
+        payload: { planetId: prompt.planetId }
+      }));
+      dismissDialog();
+    });
+  }
+
+  const btnRefuelOwn = document.getElementById("btn-refuel-own");
+  if (btnRefuelOwn) {
+    btnRefuelOwn.addEventListener("click", () => {
+      socket.send(JSON.stringify({
+        type: MSG_REFUEL,
+        payload: { amount: FREE_REFUEL_AMOUNT, isOwned: true }
+      }));
+      dismissDialog();
+    });
+  }
+
+  const btnRefuelPaid = document.getElementById("btn-refuel-paid");
+  if (btnRefuelPaid) {
+    btnRefuelPaid.addEventListener("click", () => {
+      socket.send(JSON.stringify({
+        type: MSG_REFUEL,
+        payload: { amount: PAID_REFUEL_AMOUNT, isOwned: false }
+      }));
+      dismissDialog();
+    });
+  }
+
+  const btnRevoke = document.getElementById("btn-revoke");
+  if (btnRevoke) {
+    btnRevoke.addEventListener("click", () => {
+      socket.send(JSON.stringify({
+        type: MSG_REVOKE_PLANET,
+        payload: { planetId: prompt.planetId }
+      }));
+      dismissDialog();
+    });
+  }
+
+  const btnClose = document.getElementById("btn-close");
+  if (btnClose) {
+    btnClose.addEventListener("click", dismissDialog);
+  }
+}
+
+function dismissDialog() {
+  const dialog = document.getElementById("landing-dialog");
+  if (dialog) dialog.remove();
+  landingPrompt = null;
+}
 
 function drawShip(p) {
   ctx.save();
@@ -154,9 +321,28 @@ function drawShip(p) {
 function drawPlanet(p) {
   ctx.beginPath();
   ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-  ctx.strokeStyle = "#4af";
+  
+  if (p.owner) {
+    ctx.strokeStyle = p.owner === myId ? "#0f0" : "#f0f";
+  } else {
+    ctx.strokeStyle = "#4af";
+  }
   ctx.lineWidth = 3;
   ctx.stroke();
+
+  // Draw planet name and owner
+  ctx.save();
+  ctx.fillStyle = p.owner === myId ? "#0f0" : p.owner ? "#f0f" : "#4af";
+  ctx.font = "12px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(p.name, p.x, p.y - p.r - 15);
+  
+  if (p.owner) {
+    ctx.font = "10px monospace";
+    ctx.fillStyle = p.owner === myId ? "#0f0" : "#f0f";
+    ctx.fillText(`[${p.ownerUsername || "?"}]`, p.x, p.y - p.r - 3);
+  }
+  ctx.restore();
 }
 
 // ================= MAIN LOOP =================
@@ -164,24 +350,80 @@ function drawPlanet(p) {
 function loop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // ---- UI (screen space) ----
-  ctx.fillStyle = "white";
-  ctx.font = "18px monospace";
-  ctx.fillText(`PLAYERS: ${players.length}`, 20, 30);
-  ctx.fillText(`MY ID: ${myId ?? "null"}`, 20, 55);
-  ctx.fillText(`USER: ${myName ?? "guest"}`, 20, 80);
-  // Fuel bar visual (drawn first)
-  const fuelPercentage = (myFuel / MAX_FUEL) * 100;
-  ctx.strokeStyle = "#0f0";
-  ctx.strokeRect(20, 95, 200, 20);
-  ctx.fillStyle = fuelPercentage > 25 ? "hsl(120, 100%, 39%)" : "#f00";
-  ctx.fillRect(20, 95, (fuelPercentage / 100) * 200, 20);
-
-  // Draw fuel and credits text on top of the bar
-  ctx.fillStyle = "white";
-  ctx.fillText(`FUEL: ${myFuel.toFixed(1)}/${MAX_FUEL}`, 40, 110);
-  ctx.fillStyle = "hsl(120, 100%, 45%)"; // credits in green with $ prefix
-  ctx.fillText(`CREDITS: $${myCredits}`, 20, 140);
+  // ---- HUD Panel (screen space) ----
+  const hudX = 10;
+  const hudY = 10;
+  const hudW = 200;
+  const hudH = 120;
+  
+  // HUD background panel
+  ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+  ctx.fillRect(hudX, hudY, hudW, hudH);
+  
+  // HUD border
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(hudX, hudY, hudW, hudH);
+  
+  // HUD content
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#fff";
+  ctx.font = "11px monospace";
+  
+  let yPos = hudY + 12;
+  const lineHeight = 16;
+  
+  // Player name
+  ctx.fillText(`Player: ${myName}`, hudX + 10, yPos);
+  yPos += lineHeight;
+  
+  // Credits
+  ctx.fillStyle = "#ffff00";
+  ctx.fillText(`Credits: $${Math.floor(myCredits)}`, hudX + 10, yPos);
+  yPos += lineHeight;
+  
+  // Fuel bar with percentage
+  const fuelPercent = Math.floor((myFuel / MAX_FUEL) * 100);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`Fuel: ${fuelPercent}%`, hudX + 10, yPos);
+  
+  // Draw fuel bar
+  const barW = 90;
+  const barH = 8;
+  const barX = hudX + 80;
+  const barY = yPos - 10;
+  
+  ctx.fillStyle = "#333";
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+  
+  // Fuel bar fill color based on level
+  if (fuelPercent > 50) {
+    ctx.fillStyle = "#0f0";
+  } else if (fuelPercent > 25) {
+    ctx.fillStyle = "#ff0";
+  } else {
+    ctx.fillStyle = "#f00";
+  }
+  ctx.fillRect(barX, barY, (fuelPercent / 100) * barW, barH);
+  
+  yPos += lineHeight;
+  
+  // Players count
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`Players: ${players.length}`, hudX + 10, yPos);
+  yPos += lineHeight;
+  
+  // Owned planets
+  if (ownedPlanets.length > 0) {
+    ctx.fillStyle = "#0f0";
+    ctx.fillText(`Owned: ${ownedPlanets.length}`, hudX + 10, yPos);
+  } else {
+    ctx.fillStyle = "#888";
+    ctx.fillText(`Owned: 0`, hudX + 10, yPos);
+  }
 
   if (players.length === 0) {
     requestAnimationFrame(loop);
@@ -199,8 +441,8 @@ function loop() {
     canvas.height / 2 - camTarget.y
   );
   for (const pl of planets) {
-  drawPlanet(pl);
-}
+    drawPlanet(pl);
+  }
 
   // draw ships
   for (const p of players) {
@@ -211,5 +453,6 @@ function loop() {
 
   requestAnimationFrame(loop);
 }
+
 
 loop();

@@ -9,10 +9,25 @@ import {
   MAX_FUEL,
   FUEL_THRUST_COST,
   FUEL_ROTATE_COST,
-  SHIP_RADIUS
+  SHIP_RADIUS,
+  PLANET_CLAIM_COST,
+  BASE_RENT_COST,
+  RENT_PERCENTAGE,
+  FREE_REFUEL_AMOUNT,
+  PAID_REFUEL_AMOUNT,
+  REFUEL_COST_PER_TANK
 } from './shared/constants.js';
 
-import { MSG_INPUT, MSG_STATE } from './shared/messageTypes.js';
+import { 
+  MSG_INPUT, 
+  MSG_STATE, 
+  MSG_CLAIM_PLANET,
+  MSG_CLAIM_RESPONSE,
+  MSG_REFUEL,
+  MSG_REFUEL_RESPONSE,
+  MSG_REVOKE_PLANET,
+  MSG_LANDING_PROMPT
+} from './shared/messageTypes.js';
 import { connectDB } from './db/connection.js';
 import { Player } from './models/Player.js';
 import { Planet } from './models/Planet.js';
@@ -34,9 +49,6 @@ const planets = [
 
 const players = new Map();
 
-function makeId() {
-  return Math.random().toString(36).slice(2);
-}
 
 // Initialize DB and planets on startup
 async function initializeGame() {
@@ -89,7 +101,10 @@ wss.on("connection", async ws => {
         rot: dbPlayer.rot || 0,
         fuel: dbPlayer.fuel,
         credits: dbPlayer.credits,
+        ownedPlanets: dbPlayer.ownedPlanets || [],
         on_planet : false,
+        landedOn: null,
+        lastPrompted: null,
         input: { thrust: false, rotate: 0, brake: false }
       };
 
@@ -102,6 +117,122 @@ wss.on("connection", async ws => {
 
     if (msg.type === MSG_INPUT) {
       player.input = msg.payload;
+    }
+
+    if (msg.type === MSG_CLAIM_PLANET) {
+      const { planetId } = msg.payload;
+      const planet = planets.find(p => p.id === planetId);
+      
+      if (!planet) {
+        ws.send(JSON.stringify({ 
+          type: MSG_CLAIM_RESPONSE, 
+          success: false, 
+          error: "Planet not found" 
+        }));
+        return;
+      }
+
+      if (planet.owner) {
+        ws.send(JSON.stringify({ 
+          type: MSG_CLAIM_RESPONSE, 
+          success: false, 
+          error: `Planet already owned by ${planet.ownerUsername}` 
+        }));
+        return;
+      }
+
+      if (player.credits < PLANET_CLAIM_COST) {
+        ws.send(JSON.stringify({ 
+          type: MSG_CLAIM_RESPONSE, 
+          success: false, 
+          error: `Insufficient credits. Need $${PLANET_CLAIM_COST}, have $${player.credits}` 
+        }));
+        return;
+      }
+
+      // Claim the planet
+      player.credits -= PLANET_CLAIM_COST;
+      player.ownedPlanets.push(planetId);
+      planet.owner = player.id;
+      planet.ownerUsername = player.username;
+
+      // Update in DB
+      await Planet.findOneAndUpdate(
+        { planetId },
+        { owner: player.id, ownerUsername: player.username }
+      );
+
+      await Player.findOneAndUpdate(
+        { playerId: player.id },
+        { ownedPlanets: player.ownedPlanets, credits: player.credits }
+      );
+
+      ws.send(JSON.stringify({ 
+        type: MSG_CLAIM_RESPONSE, 
+        success: true, 
+        message: `Successfully claimed ${planet.name}!`,
+        planetId
+      }));
+    }
+
+    if (msg.type === MSG_REVOKE_PLANET) {
+      const { planetId } = msg.payload;
+      
+      if (!player.ownedPlanets.includes(planetId)) {
+        ws.send(JSON.stringify({ 
+          type: MSG_CLAIM_RESPONSE, 
+          success: false, 
+          error: "You don't own this planet" 
+        }));
+        return;
+      }
+
+      const planet = planets.find(p => p.id === planetId);
+      player.ownedPlanets = player.ownedPlanets.filter(p => p !== planetId);
+      planet.owner = null;
+      planet.ownerUsername = null;
+
+      await Planet.findOneAndUpdate(
+        { planetId },
+        { owner: null, ownerUsername: null }
+      );
+
+      await Player.findOneAndUpdate(
+        { playerId: player.id },
+        { ownedPlanets: player.ownedPlanets }
+      );
+
+      ws.send(JSON.stringify({ 
+        type: MSG_CLAIM_RESPONSE, 
+        success: true, 
+        message: `Revoked ownership of ${planet.name}`,
+        planetId
+      }));
+    }
+
+    if (msg.type === MSG_REFUEL) {
+      const { amount, isOwned } = msg.payload;
+      const cost = isOwned ? 0 : REFUEL_COST_PER_TANK * (amount / PAID_REFUEL_AMOUNT);
+
+      if (!isOwned && player.credits < cost) {
+        ws.send(JSON.stringify({ 
+          type: MSG_REFUEL_RESPONSE, 
+          success: false, 
+          error: `Insufficient credits. Need $${cost.toFixed(2)}` 
+        }));
+        return;
+      }
+
+      player.credits -= cost;
+      player.fuel = Math.min(MAX_FUEL, player.fuel + amount);
+
+      ws.send(JSON.stringify({ 
+        type: MSG_REFUEL_RESPONSE, 
+        success: true, 
+        fuelAmount: amount,
+        costDeducted: cost,
+        newFuel: player.fuel
+      }));
     }
   });
 
@@ -116,6 +247,7 @@ wss.on("connection", async ws => {
           x: player.x,
           y: player.y,
           rot: player.rot,
+          ownedPlanets: player.ownedPlanets,
           lastUpdated: new Date()
         }
       );
@@ -228,8 +360,72 @@ function updatePlayer(p) {
       //landing check
       const speed = Math.hypot(p.vx, p.vy);
       if (speed < 0.5 && !p.input.thrust) {
-        p.on_planet = true;
-        p.landedOn = planet.id;
+        // Check if landing on a different planet or not yet prompted
+        if (!p.on_planet || p.landedOn !== planet.id || !p.lastPrompted) {
+          p.on_planet = true;
+          p.landedOn = planet.id;
+          p.lastPrompted = planet.id;
+
+          // Handle economy: rent payment or claim prompt
+          let ws = null;
+          for (const [clientWs, clientPlayer] of players.entries()) {
+            if (clientPlayer.id === p.id) {
+              ws = clientWs;
+              break;
+            }
+          }
+
+          if (ws) {
+            if (planet.owner && planet.owner !== p.id) {
+              // Pay rent to planet owner
+              const rentAmount = Math.max(BASE_RENT_COST, Math.floor(p.credits * RENT_PERCENTAGE));
+              const actualRent = Math.min(rentAmount, p.credits);
+              
+              p.credits -= actualRent;
+
+              // Find owner and give them credits
+              for (const ownerPlayer of players.values()) {
+                if (ownerPlayer.id === planet.owner) {
+                  ownerPlayer.credits += actualRent;
+                  break;
+                }
+              }
+
+              ws.send(JSON.stringify({
+                type: MSG_LANDING_PROMPT,
+                planetId: planet.id,
+                planetName: planet.name,
+                owner: planet.ownerUsername,
+                isOwned: true,
+                rentPaid: actualRent,
+                creditsLeft: p.credits,
+                currentCredits: p.credits
+              }));
+            } else if (!planet.owner) {
+              // Prompt to claim
+              ws.send(JSON.stringify({
+                type: MSG_LANDING_PROMPT,
+                planetId: planet.id,
+                planetName: planet.name,
+                isOwned: false,
+                isOwner: false,
+                claimCost: PLANET_CLAIM_COST,
+                currentCredits: p.credits
+              }));
+            } else if (planet.owner === p.id) {
+              // Own planet - just landed safely
+              ws.send(JSON.stringify({
+                type: MSG_LANDING_PROMPT,
+                planetId: planet.id,
+                planetName: planet.name,
+                isOwned: true,
+                isOwner: true,
+                currentCredits: p.credits
+              }));
+            }
+          }
+        }
+        return;
       }
     }
   }
@@ -278,6 +474,7 @@ setInterval(async () => {
         rot: p.rot,
         fuel: p.fuel,
         credits: p.credits,
+        ownedPlanets: p.ownedPlanets,
         lastUpdated: new Date()
       });
     } catch (err) {

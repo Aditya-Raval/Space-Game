@@ -27,6 +27,14 @@ const planetSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  ownerUsername: {
+    type: String,
+    default: null
+  },
+  rentPercentage: {
+    type: Number,
+    default: 10
+  },
   controlFactors: {
     militaryStrength: {
       type: Number,
