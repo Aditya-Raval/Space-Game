@@ -54,7 +54,7 @@ const players = new Map();
 async function initializeGame() {
   await connectDB();
   
-  // Initialize planets in DB if not exist
+  // Initialize planets in DB if not exist and load ownership
   for (const planet of planets) {
     const existingPlanet = await Planet.findOne({ planetId: planet.id });
     if (!existingPlanet) {
@@ -65,6 +65,10 @@ async function initializeGame() {
         y: planet.y,
         r: planet.r
       });
+    } else {
+      // Load ownership from DB
+      planet.owner = existingPlanet.owner;
+      planet.ownerUsername = existingPlanet.ownerUsername;
     }
   }
   console.log("Game initialized");
@@ -447,9 +451,18 @@ setInterval(() => {
     y: p.y,
     rot: p.rot,
     fuel: p.fuel,
-    credits: p.credits
+    credits: p.credits,
+    ownedPlanets: p.ownedPlanets
   })),
-  planets
+  planets: planets.map(p => ({
+    id: p.id,
+    x: p.x,
+    y: p.y,
+    r: p.r,
+    name: p.name,
+    owner: p.owner,
+    ownerUsername: p.ownerUsername
+  }))
 };
 
   const msg = JSON.stringify({
