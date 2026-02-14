@@ -3,7 +3,7 @@ export const TICK_RATE = 60;          // server ticks per second
 export const DT = 1 / TICK_RATE;      // fixed timestep
 
 // ===== Ship physics =====
-export const ROT_SPEED = 12.0;         // rad/sec (fast turning)
+export const ROT_SPEED = 8.0;         // rad/sec (fast turning)
 export const THRUST = 6.0;             // units/sec² (slow accel)
 export const BRAKE = 14.0;             // braking force
 export const MAX_SPEED = 12.0;         // velocity cap
