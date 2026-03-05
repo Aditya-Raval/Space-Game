@@ -300,27 +300,80 @@ function dismissDialog() {
   landingPrompt = null;
 }
 
+const shipImg = new Image();
+shipImg.src = "./assets/ships/player_ship_idle.png";
+
+const shipImgThr = new Image();
+shipImgThr.src = "./assets/ships/player_ship.png";
+
+const otherImg = new Image();
+otherImg.src = "./assets/ships/other_ship_idle.png";
+
+shipImg.onload = () => console.log("SHIP IMAGE LOADED");
+shipImg.onerror = () => console.log("SHIP IMAGE FAILED");
+
+// function drawShip(p) {
+//   ctx.save();
+//   ctx.translate(p.x, p.y);
+//   ctx.rotate(p.rot || 0);
+
+//   // ship body
+//   ctx.beginPath();
+//   ctx.moveTo(18,0);
+//   ctx.lineTo(-10,10);
+//   ctx.lineTo(-6,0);
+//   ctx.lineTo(-10,-10);
+//   ctx.closePath();
+
+//   ctx.strokeStyle = p.id === myId ? "#0ff" : "#fff";
+//   ctx.lineWidth = 2;
+//   ctx.stroke();
+
+//   // engine glow
+//   if (p.thrust) {
+//     ctx.beginPath();
+//     ctx.moveTo(-10,4);
+//     ctx.lineTo(-18,0);
+//     ctx.lineTo(-10,-4);
+//     ctx.strokeStyle = "orange";
+//     ctx.stroke();
+//   }
+
+//   ctx.restore();
+// }
+
 function drawShip(p) {
+  if (!shipImg.complete || !shipImgThr.complete) return;
+
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.rotate(p.rot || 0);
+  ctx.rotate((p.rot || 0) + Math.PI / 2);
 
-  ctx.beginPath();
-  ctx.moveTo(15, 0);
-  ctx.lineTo(-10, 8);
-  ctx.lineTo(-10, -8);
-  ctx.closePath();
+  const size = 80;
+  if(p.id !== myId){
+    ctx.drawImage(otherImg, -size/2, -size/2, size, size);
+    ctx.restore();
+    return;
+  }
+  // determine thrust visually
+  const thrusting = (p.id === myId) ? input.thrust : p.thrust;
 
-  ctx.strokeStyle = p.id === myId ? "cyan" : "white";
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  if (!thrusting) {
+    ctx.drawImage(shipImg, -size/2, -size/2, size, size);
+  } else {
+    ctx.drawImage(shipImgThr, -size/2, -size/2, size, size);
+  }
 
   ctx.restore();
 }
-
 function drawPlanet(p) {
   ctx.beginPath();
   ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = ctx.strokeStyle;
+
+  ctx.stroke();
+  ctx.shadowBlur = 0;
   
   if (p.owner) {
     ctx.strokeStyle = p.owner === myId ? "#0f0" : "#f0f";
@@ -345,10 +398,22 @@ function drawPlanet(p) {
   ctx.restore();
 }
 
+const stars = [];
+for (let i = 0; i < 200; i++) {
+  stars.push({
+    x: Math.random() * 4000 - 2000,
+    y: Math.random() * 4000 - 2000,
+    size: Math.random() * 2
+  });
+}
 // ================= MAIN LOOP =================
 
 function loop() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height); 
+  for (const s of stars) {
+    ctx.fillStyle = "white";
+    ctx.fillRect(s.x, s.y, s.size, s.size);
+  }
 
   // ---- HUD Panel (screen space) ----
   const hudX = 10;

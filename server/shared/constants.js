@@ -6,7 +6,7 @@ export const DT = 1 / TICK_RATE;      // fixed timestep
 export const ROT_SPEED = 8.0;         // rad/sec (fast turning)
 export const THRUST = 6.0;             // units/sec² (slow accel)
 export const BRAKE = 14.0;             // braking force
-export const MAX_SPEED = 12.0;         // velocity cap
+export const MAX_SPEED = 25.0;         // velocity cap
 export const SHIP_RADIUS = 10;
 
 // ===== Fuel system =====
