@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
+
 app.use(bodyParser.json());
 
 // Simple CORS for development

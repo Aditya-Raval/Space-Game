@@ -24,3 +24,12 @@ export const RENT_PERCENTAGE = 0.05; // 5% of landing player's credits
 export const REFUEL_COST_PER_TANK = 25;
 export const FREE_REFUEL_AMOUNT = 20;
 export const PAID_REFUEL_AMOUNT = 20;
+
+// Missile constants
+export const MISSILE_FUEL_COST = 5;
+export const MISSILE_CREDIT_COST = 200;
+export const MISSILE_SPEED = 300;
+export const MISSILE_LIFETIME = 5000; // ms
+export const MISSILE_DAMAGE_FUEL = 10;
+export const MISSILE_DAMAGE_CREDITS = 500;
+export const MISSILE_REWARD_CREDITS = 1000;

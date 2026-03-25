@@ -15,7 +15,14 @@ import {
   RENT_PERCENTAGE,
   FREE_REFUEL_AMOUNT,
   PAID_REFUEL_AMOUNT,
-  REFUEL_COST_PER_TANK
+  REFUEL_COST_PER_TANK,
+  MISSILE_FUEL_COST,
+  MISSILE_CREDIT_COST,
+  MISSILE_SPEED,
+  MISSILE_LIFETIME,
+  MISSILE_DAMAGE_FUEL,
+  MISSILE_DAMAGE_CREDITS,
+  MISSILE_REWARD_CREDITS
 } from './shared/constants.js';
 
 import { 
@@ -26,7 +33,13 @@ import {
   MSG_REFUEL,
   MSG_REFUEL_RESPONSE,
   MSG_REVOKE_PLANET,
-  MSG_LANDING_PROMPT
+  MSG_LANDING_PROMPT,
+  MSG_CHAT,
+  MSG_CHAT_BROADCAST,
+  MSG_CHAT_ERROR,
+  MSG_FIRE_MISSILE,
+  MSG_MISSILE_UPDATE,
+  MSG_MISSILE_HIT
 } from './shared/messageTypes.js';
 import { connectDB } from './db/connection.js';
 import { Player } from './models/Player.js';
@@ -48,6 +61,7 @@ const planets = [
 ];
 
 const players = new Map();
+const missiles = [];
 
 
 // Initialize DB and planets on startup
@@ -214,6 +228,41 @@ wss.on("connection", async ws => {
       }));
     }
 
+    if (msg.type === MSG_CHAT) {
+      const { text } = msg.payload || {};
+      const cleanText = (text || '').toString().trim();
+      const badWords = ['fuck','shit','bitch','asshole','damn','dick','pussy'];
+      const containsBad = badWords.some(word => new RegExp(`\\b${word}\\b`, 'i').test(cleanText));
+
+      if (!cleanText) {
+        ws.send(JSON.stringify({ type: MSG_CHAT_ERROR, error: 'Cannot send empty message' }));
+        return;
+      }
+
+      if (containsBad) {
+        ws.send(JSON.stringify({ type: MSG_CHAT_ERROR, error: 'Profanity is not allowed' }));
+        return;
+      }
+
+      const chatPayload = {
+        type: MSG_CHAT_BROADCAST,
+        payload: {
+          from: player.username,
+          fromId: player.id,
+          text: cleanText,
+          ts: Date.now()
+        }
+      };
+
+      for (const client of wss.clients) {
+        if (client.readyState === 1) {
+          client.send(JSON.stringify(chatPayload));
+        }
+      }
+
+      return;
+    }
+
     if (msg.type === MSG_REFUEL) {
       const { amount, isOwned } = msg.payload;
       const cost = isOwned ? 0 : REFUEL_COST_PER_TANK * (amount / PAID_REFUEL_AMOUNT);
@@ -237,6 +286,30 @@ wss.on("connection", async ws => {
         costDeducted: cost,
         newFuel: player.fuel
       }));
+    }
+
+    if (msg.type === MSG_FIRE_MISSILE) {
+      if (player.fuel < MISSILE_FUEL_COST || player.credits < MISSILE_CREDIT_COST) {
+        ws.send(JSON.stringify({ type: MSG_CHAT_ERROR, error: 'Not enough fuel or credits for missile' }));
+        return;
+      }
+
+      player.fuel -= MISSILE_FUEL_COST;
+      player.credits -= MISSILE_CREDIT_COST;
+
+      const missile = {
+        id: Date.now() + Math.random(),
+        x: player.x,
+        y: player.y,
+        vx: Math.cos(player.rot) * MISSILE_SPEED,
+        vy: Math.sin(player.rot) * MISSILE_SPEED,
+        shooter: player.id,
+        shooterUsername: player.username,
+        created: Date.now()
+      };
+
+      missiles.push(missile);
+      return;
     }
   });
 
@@ -444,6 +517,72 @@ setInterval(() => {
     updatePlayer(p);
   }
 
+  // Update missiles
+  for (let i = missiles.length - 1; i >= 0; i--) {
+    const m = missiles[i];
+    m.x += m.vx * DT;
+    m.y += m.vy * DT;
+
+    // Check timeout
+    if (Date.now() - m.created > MISSILE_LIFETIME) {
+      missiles.splice(i, 1);
+      continue;
+    }
+
+    // Check collision with planets
+    let hitPlanet = false;
+    for (const p of planets) {
+      const dx = m.x - p.x;
+      const dy = m.y - p.y;
+      if (dx * dx + dy * dy < p.r * p.r) {
+        missiles.splice(i, 1);
+        hitPlanet = true;
+        break;
+      }
+    }
+    if (hitPlanet) continue;
+
+    // Check collision with players
+    for (const [ws, pl] of players) {
+      if (pl.id === m.shooter) continue; // Don't hit self
+      const dx = m.x - pl.x;
+      const dy = m.y - pl.y;
+      if (dx * dx + dy * dy < SHIP_RADIUS * SHIP_RADIUS) {
+        // Hit
+        pl.fuel = Math.max(0, pl.fuel - MISSILE_DAMAGE_FUEL);
+        pl.credits = Math.max(0, pl.credits - MISSILE_DAMAGE_CREDITS);
+
+        // Reward shooter
+        for (const [ws2, pl2] of players) {
+          if (pl2.id === m.shooter) {
+            pl2.credits += MISSILE_REWARD_CREDITS;
+            break;
+          }
+        }
+
+        // Broadcast hit
+        const hitMsg = {
+          type: MSG_MISSILE_HIT,
+          payload: {
+            shooter: m.shooterUsername,
+            target: pl.username,
+            reward: MISSILE_REWARD_CREDITS,
+            damageFuel: MISSILE_DAMAGE_FUEL,
+            damageCredits: MISSILE_DAMAGE_CREDITS
+          }
+        };
+        for (const client of wss.clients) {
+          if (client.readyState === 1) {
+            client.send(JSON.stringify(hitMsg));
+          }
+        }
+
+        missiles.splice(i, 1);
+        break;
+      }
+    }
+  }
+
   const snapshot = {
     players : Array.from(players.values()).map(p => ({
     id: p.id,
@@ -462,6 +601,13 @@ setInterval(() => {
     name: p.name,
     owner: p.owner,
     ownerUsername: p.ownerUsername
+  })),
+  missiles: missiles.map(m => ({
+    id: m.id,
+    x: m.x,
+    y: m.y,
+    vx: m.vx,
+    vy: m.vy
   }))
 };
 

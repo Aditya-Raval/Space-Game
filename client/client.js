@@ -1,15 +1,29 @@
-import { MSG_INPUT, MSG_STATE, MSG_CLAIM_PLANET, MSG_CLAIM_RESPONSE, MSG_REFUEL, MSG_REFUEL_RESPONSE, MSG_REVOKE_PLANET, MSG_LANDING_PROMPT } from "./shared/messageTypes.js";
-import { MAX_FUEL, PLANET_CLAIM_COST, FREE_REFUEL_AMOUNT, PAID_REFUEL_AMOUNT, REFUEL_COST_PER_TANK } from "./shared/constants.js";
+import { MSG_INPUT, MSG_STATE, MSG_CLAIM_PLANET, MSG_CLAIM_RESPONSE, MSG_REFUEL, MSG_REFUEL_RESPONSE, MSG_REVOKE_PLANET, MSG_LANDING_PROMPT, MSG_CHAT, MSG_CHAT_BROADCAST, MSG_CHAT_ERROR, MSG_FIRE_MISSILE, MSG_MISSILE_UPDATE, MSG_MISSILE_HIT } from "./shared/messageTypes.js";
+import { MAX_FUEL, PLANET_CLAIM_COST, FREE_REFUEL_AMOUNT, PAID_REFUEL_AMOUNT, REFUEL_COST_PER_TANK, MISSILE_FUEL_COST, MISSILE_CREDIT_COST } from "./shared/constants.js";
 
 console.log("CLIENT LOADED");
 
 let myId = null;
 let players = [];
 let planets = [];
+let missiles = [];
 let myName = null;
 let myCredits = 0;
 let landingPrompt = null;
 let ownedPlanets = [];
+
+const planetImageNames = {
+  p1: 'sphereplanet.png',      // Terra
+  p2: 'dryvenuslikeplanet.png', // Mars
+  p3: 'neptunlikeplanet.png',   // Jupiter
+  p4: 'dryvenuslikeplanet.png', // Venus
+  p5: 'dryhotplanet.png',       // Mercury
+  p6: 'iceplanet.png',          // Saturn
+  p7: 'iceplanet_2.png',        // Uranus
+  p8: 'neptunlikeplanet.png'    // Neptune
+};
+
+const planetImages = {};
 
 // ===== Auth UI handlers =====
 async function doAuth(action) {
@@ -95,6 +109,10 @@ function connectSocket(playerId) {
           type: MSG_INPUT,
           payload: input
         }));
+        if (input.missile) {
+          socket.send(JSON.stringify({ type: MSG_FIRE_MISSILE }));
+          input.missile = false;
+        }
       }
     }, 50);
   };
@@ -102,7 +120,102 @@ function connectSocket(playerId) {
 }
 
 // input
-const input = { thrust: false, rotate: 0 };
+const input = { thrust: false, rotate: 0, missile: false };
+
+const chatProfanity = ['fuck','shit','bitch','asshole','damn','dick','pussy'];
+
+function createChatWidget() {
+  const existing = document.getElementById('chat-widget');
+  if (existing) return;
+
+  const widget = document.createElement('div');
+  widget.id = 'chat-widget';
+  widget.style.cssText = `
+    position: fixed;
+    right: 15px;
+    top: 15px;
+    width: 280px;
+    max-height: 420px;
+    background: rgba(0,0,0,0.7);
+    border: 1px solid #777;
+    border-radius: 6px;
+    color: #fff;
+    font-family: monospace;
+    z-index: 1100;
+    overflow: hidden;
+    transition: all 0.16s ease;
+    opacity: 0.96;
+  `;
+
+  const title = document.createElement('div');
+  title.textContent = 'Chat (hover to type)';
+  title.style.cssText = 'padding: 8px 10px; border-bottom: 1px solid #444; font-size: 12px;';
+
+  const msgArea = document.createElement('div');
+  msgArea.id = 'chat-msg-area';
+  msgArea.style.cssText = 'padding: 8px; height: 270px; overflow-y: auto; font-size: 12px;';
+
+  const inputContainer = document.createElement('div');
+  inputContainer.style.cssText = 'display: none; padding: 8px; border-top: 1px solid #444;';
+  inputContainer.id = 'chat-input-container';
+
+  const inputEl = document.createElement('input');
+  inputEl.id = 'chat-input';
+  inputEl.placeholder = 'Type message and press Enter...';
+  inputEl.style.cssText = 'width: 100%; padding: 6px; background:#111; color:#fff; border:1px solid #555; border-radius:3px;';
+
+  inputContainer.appendChild(inputEl);
+  widget.appendChild(title);
+  widget.appendChild(msgArea);
+  widget.appendChild(inputContainer);
+
+  widget.addEventListener('mouseenter', () => {
+    inputContainer.style.display = 'block';
+    widget.style.boxShadow = '0 0 16px rgba(255,255,255,0.25)';
+  });
+  widget.addEventListener('mouseleave', () => {
+    inputContainer.style.display = 'none';
+    widget.style.boxShadow = 'none';
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const text = inputEl.value.trim();
+      if (!text) return;
+      const hasProfanity = chatProfanity.some(word => new RegExp('\\b' + word + '\\b', 'i').test(text));
+      if (hasProfanity) {
+        showNotification('Profanity blocked.', 'red');
+        inputEl.value = '';
+        return;
+      }
+      if (socket && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: MSG_CHAT, payload: { text } }));
+      }
+      inputEl.value = '';
+    }
+  });
+
+  document.body.appendChild(widget);
+}
+
+function appendChatMessage({ from, text, ts, system }) {
+  const msgArea = document.getElementById('chat-msg-area');
+  if (!msgArea) return;
+
+  const line = document.createElement('div');
+  line.style.cssText = 'margin-bottom: 4px;';
+
+  const time = new Date(ts || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  if (system) {
+    line.textContent = `[${time}] ${text}`;
+    line.style.color = '#ffa500';
+  } else {
+    line.textContent = `[${time}] ${from}: ${text}`;
+  }
+  msgArea.appendChild(line);
+  msgArea.scrollTop = msgArea.scrollHeight;
+}
 
 // ================= INPUT =================
 
@@ -111,12 +224,14 @@ window.addEventListener("keydown", e => {
   if (e.key === "a") input.rotate = -1;
   if (e.key === "d") input.rotate = 1;
   if (e.key === "s") input.brake = true;
+  if (e.key === "f") input.missile = true;
 });
 
 window.addEventListener("keyup", e => {
   if (e.key === "w") input.thrust = false;
   if (e.key === "a" || e.key === "d") input.rotate = 0;
   if (e.key === "s") input.brake = false;
+  if (e.key === "f") input.missile = false;
 });
 
 // ================= NETWORK =================
@@ -130,11 +245,22 @@ function socketOnMessage(e) {
     console.log("MY ID:", myId);
     // hide login
     document.getElementById('login-root').style.display = 'none';
+    createChatWidget();
+    appendChatMessage({ system: true, text: 'Chat ready!', ts: Date.now() });
   }
 
   if (msg.type === MSG_STATE) {
     players = msg.payload.players;
     planets = msg.payload.planets;
+    missiles = msg.payload.missiles || [];
+    
+    // Load planet images if not already loaded
+    for (const p of planets) {
+      if (!planetImages[p.id]) {
+        planetImages[p.id] = new Image();
+        planetImages[p.id].src = `./assets/planets/${planetImageNames[p.id] || 'sphereplanet.png'}`;
+      }
+    }
     
     // Update my fuel and credits
     const myPlayer = players.find(p => p.id === myId);
@@ -148,6 +274,19 @@ function socketOnMessage(e) {
   if (msg.type === MSG_LANDING_PROMPT) {
     landingPrompt = msg;
     showLandingPrompt(msg);
+  }
+
+  if (msg.type === MSG_CHAT_BROADCAST) {
+    appendChatMessage({ from: msg.payload.from, text: msg.payload.text, ts: msg.payload.ts });
+  }
+
+  if (msg.type === MSG_CHAT_ERROR) {
+    showNotification(msg.error || 'Chat error', 'red');
+  }
+
+  if (msg.type === MSG_MISSILE_HIT) {
+    const { shooter, target, reward, damageFuel, damageCredits } = msg.payload;
+    showNotification(`${shooter} hit ${target}! +$${reward}`, 'yellow');
   }
 
   if (msg.type === MSG_CLAIM_RESPONSE) {
@@ -366,22 +505,51 @@ function drawShip(p) {
 
   ctx.restore();
 }
-function drawPlanet(p) {
+function drawMissile(m) {
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  const angle = Math.atan2(m.vy, m.vx);
+  ctx.rotate(angle);
   ctx.beginPath();
-  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-  ctx.shadowBlur = 20;
-  ctx.shadowColor = ctx.strokeStyle;
-
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  
-  if (p.owner) {
-    ctx.strokeStyle = p.owner === myId ? "#0f0" : "#f0f";
+  ctx.moveTo(10, 0);
+  ctx.lineTo(-5, -3);
+  ctx.lineTo(-5, 3);
+  ctx.closePath();
+  ctx.fillStyle = "#ff0000";
+  ctx.fill();
+  ctx.restore();
+}
+function drawPlanet(p) {
+  const img = planetImages[p.id];
+  if (img && img.complete && img.naturalHeight !== 0) {
+    // Draw only the planet image when loaded
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    let size;
+    if (p.id === 'p1') {
+      size = p.r * 4 + 3; // Twice the size for Terra due to ring, plus extra
+    } else {
+      size = p.r * 2 + 3; // Standard size plus extra
+    }
+    ctx.drawImage(img, -size/2, -size/2, size, size);
+    ctx.restore();
   } else {
-    ctx.strokeStyle = "#4af";
+    // Fallback to drawing circle with shadow and border
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = ctx.strokeStyle;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    if (p.owner) {
+      ctx.strokeStyle = p.owner === myId ? "#0f0" : "#f0f";
+    } else {
+      ctx.strokeStyle = "#4af";
+    }
+    ctx.lineWidth = 3;
+    ctx.stroke();
   }
-  ctx.lineWidth = 3;
-  ctx.stroke();
 
   // Draw planet name and owner
   ctx.save();
@@ -419,7 +587,7 @@ function loop() {
   const hudX = 10;
   const hudY = 10;
   const hudW = 200;
-  const hudH = 120;
+  const hudH = 140;
   
   // HUD background panel
   ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
@@ -490,6 +658,15 @@ function loop() {
     ctx.fillText(`Owned: 0`, hudX + 10, yPos);
   }
 
+  yPos += lineHeight;
+
+  // Missiles info
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`Missiles: ${missiles.length}`, hudX + 10, yPos);
+  yPos += lineHeight;
+  ctx.fillStyle = "#ff0";
+  ctx.fillText(`Fire: F (${MISSILE_FUEL_COST} fuel, $${MISSILE_CREDIT_COST})`, hudX + 10, yPos);
+
   if (players.length === 0) {
     requestAnimationFrame(loop);
     return;
@@ -512,6 +689,11 @@ function loop() {
   // draw ships
   for (const p of players) {
     drawShip(p);
+  }
+
+  // draw missiles
+  for (const m of missiles) {
+    drawMissile(m);
   }
 
   ctx.restore();
