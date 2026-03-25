@@ -74,23 +74,39 @@ export function createChatWidget() {
     widget.style.boxShadow = 'none';
   });
 
-  inputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const text = inputEl.value.trim();
-      if (!text) return;
-      const hasProfanity = chatProfanity.some(word => new RegExp('\\b' + word + '\\b', 'i').test(text));
-      if (hasProfanity) {
-        showNotification('Profanity blocked.', 'red');
-        inputEl.value = '';
-        return;
-      }
-      if (state.socket && state.socket.readyState === 1) {
-        state.socket.send(JSON.stringify({ type: MSG_CHAT, payload: { text } }));
-      }
-      inputEl.value = '';
-    }
-  });
+        inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            // Guard: ensure chatProfanity is a non-empty array before filtering
+            const hasProfanity = Array.isArray(chatProfanity) && chatProfanity.length > 0
+            ? chatProfanity.some(word => {
+                try {
+                    return new RegExp('\\b' + word + '\\b', 'i').test(text);
+                } catch {
+                    // Malformed word in list won't crash the whole filter
+                    return false;
+                }
+                })
+            : false;
+
+            if (hasProfanity) {
+            showNotification('Profanity blocked.', 'red');
+            inputEl.value = '';
+            return;
+            }
+
+            if (state.socket && state.socket.readyState === 1) {
+            state.socket.send(JSON.stringify({ type: MSG_CHAT, payload: { text } }));
+            } else {
+            showNotification('Not connected.', 'red');
+            }
+
+            inputEl.value = '';
+        }
+    });
 
   document.body.appendChild(widget);
 }

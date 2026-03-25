@@ -74,4 +74,4 @@ export const parallaxLayers = [
   { factor: 1.0, count: numStars - Math.floor(numStars * 0.8), color: '#fff', size: 2 }
 ];
 
-export const chatProfanity = ['fuck','shit','bitch','asshole','damn','dick','pussy'];
+export const chatProfanity = []; // loaded from /assets/en.txt at runtime

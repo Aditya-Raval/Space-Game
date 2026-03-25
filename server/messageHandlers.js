@@ -9,7 +9,8 @@ import {
   MISSILE_LIFETIME,
   MISSILE_DAMAGE_FUEL,
   MISSILE_DAMAGE_CREDITS,
-  MISSILE_REWARD_CREDITS
+  MISSILE_REWARD_CREDITS,
+  MAX_FUEL
 } from './shared/constants.js';
 import {
   MSG_INPUT,
@@ -27,7 +28,6 @@ import {
 import { players, planets, missiles } from './gameState.js';
 import { Player } from './models/Player.js';
 
-const badWords = ['fuck','shit','bitch','asshole','damn','dick','pussy'];
 
 export async function handleAuth(msg, ws) {
   const { playerId } = msg.payload || {};
@@ -136,12 +136,6 @@ export function handleChat(msg, ws, player, wss) {
   const text = (msg.payload?.text || '').toString().trim();
   if (!text) {
     ws.send(JSON.stringify({ type: MSG_CHAT_ERROR, error: 'Cannot send empty message' }));
-    return player;
-  }
-
-  const containsBad = badWords.some(word => new RegExp(`\\b${word}\\b`, 'i').test(text));
-  if (containsBad) {
-    ws.send(JSON.stringify({ type: MSG_CHAT_ERROR, error: 'Profanity is not allowed' }));
     return player;
   }
 
