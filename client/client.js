@@ -2,7 +2,7 @@ import { MSG_INPUT, MSG_STATE, MSG_CLAIM_PLANET, MSG_CLAIM_RESPONSE,
    MSG_REFUEL, MSG_REFUEL_RESPONSE, MSG_REVOKE_PLANET, MSG_LANDING_PROMPT,
    MSG_CHAT, MSG_CHAT_BROADCAST, MSG_CHAT_ERROR, MSG_FIRE_MISSILE,
     MSG_MISSILE_UPDATE,  MSG_MISSILE_HIT } from "./shared/messageTypes.js";
-    
+
 import { MAX_FUEL, PLANET_CLAIM_COST, FREE_REFUEL_AMOUNT,
    PAID_REFUEL_AMOUNT, REFUEL_COST_PER_TANK,
     MISSILE_FUEL_COST, MISSILE_CREDIT_COST } from "./shared/constants.js";
@@ -17,6 +17,8 @@ let myName = null;
 let myCredits = 0;
 let landingPrompt = null;
 let ownedPlanets = [];
+let missilePreview = false;
+let showControls = false;
 
 const planetImageNames = {
   p1: 'sphereplanet.png',      // Terra
@@ -26,7 +28,27 @@ const planetImageNames = {
   p5: 'dryhotplanet.png',       // Mercury
   p6: 'iceplanet.png',          // Saturn
   p7: 'iceplanet_2.png',        // Uranus
-  p8: 'neptunlikeplanet.png'    // Neptune
+  p8: 'neptunlikeplanet.png',   // Neptune
+  p9: 'iceplanet.png',          // Pluto
+  p10: 'moon.png',              // Ceres
+  p11: 'shattered_planet.png',  // Eris
+  p12: 'iceplanet_2.png',       // Haumea
+  p13: 'neptunlikeplanet.png',  // Makemake
+  p14: 'moon.png',              // Titan
+  p15: 'iceplanet.png',         // Europa
+  p16: 'moon.png',              // Ganymede
+  p17: 'lava_planet.png',       // Callisto
+  p18: 'lava_planet.png',       // Io
+  p19: 'iceplanet_2.png',       // Triton
+  p20: 'moon.png',              // Charon
+  p21: 'machine_world.png',     // Oberon
+  p22: 'exoplanet.png',         // Rhea
+  p23: 'shattered_planet.png',  // Iapetus
+  p24: 'exoplanet.png',         // Dione
+  p25: 'sun.png',               // Tethys
+  p26: 'iceplanet.png',         // Enceladus
+  p27: 'shattered_planet.png',  // Mimas
+  p28: 'machine_world.png'      // Hyperion
 };
 
 const planetImages = {};
@@ -223,6 +245,128 @@ function appendChatMessage({ from, text, ts, system }) {
   msgArea.scrollTop = msgArea.scrollHeight;
 }
 
+// ================= GAMEPAD SUPPORT =================
+
+// Gamepad state
+let gamepadConnected = false;
+let lastGamepadState = {
+  leftStickX: 0,
+  leftTrigger: 0,
+  rightTrigger: 0,
+  xButton: false,
+  yButton: false,
+  bButton: false,
+  aButton: false,
+  startButton: false
+};
+
+function updateGamepadInput() {
+  const gamepads = navigator.getGamepads();
+  const gamepad = gamepads[0]; // Use first connected gamepad
+  
+  if (!gamepad) {
+    if (gamepadConnected) {
+      console.log("Gamepad disconnected");
+      gamepadConnected = false;
+      // Reset inputs when gamepad disconnects
+      input.rotate = 0;
+      input.thrust = false;
+      input.brake = false;
+      input.missile = false;
+      missilePreview = false;
+    }
+    return;
+  }
+  
+  if (!gamepadConnected) {
+    console.log("Gamepad connected:", gamepad.id);
+    gamepadConnected = true;
+  }
+  
+  // Left stick X-axis for steering (with deadzone)
+  const leftStickX = gamepad.axes[0];
+  const deadzone = 0.1;
+  if (Math.abs(leftStickX) > deadzone) {
+    input.rotate = leftStickX; // -1 to 1
+  } else {
+    input.rotate = 0;
+  }
+  
+  // Left trigger for brake
+  const leftTrigger = gamepad.buttons[6].value; // 0 to 1
+  input.brake = leftTrigger > 0.1;
+  
+  // Left bumper (LB) for missile preview
+  const leftBumper = gamepad.buttons[4].pressed;
+  missilePreview = leftBumper;
+  
+  // Right trigger for thrust
+  const rightTrigger = gamepad.buttons[7].value; // 0 to 1
+  input.thrust = rightTrigger > 0.1;
+  
+  // X button for fire (only trigger on press, not hold)
+  const xButtonPressed = gamepad.buttons[2].pressed;
+  if (xButtonPressed && !lastGamepadState.xButton) {
+    input.missile = true;
+  }
+  // Note: Don't set missile to false here - let the network code handle it
+  
+  // Start button for controls toggle
+  const startButtonPressed = gamepad.buttons[8].pressed;
+  if (startButtonPressed && !lastGamepadState.startButton) {
+    showControls = !showControls;
+  }
+  
+  // Handle landing dialog gamepad controls
+  if (landingPrompt) {
+    // Y button (button 3) for refuel
+    const yButtonPressed = gamepad.buttons[3].pressed;
+    if (yButtonPressed && !lastGamepadState.yButton) {
+      handleLandingDialogAction('refuel');
+    }
+    
+    // B button (button 1) for revoke (only if player owns the planet)
+    const bButtonPressed = gamepad.buttons[1].pressed;
+    if (bButtonPressed && !lastGamepadState.bButton && landingPrompt.isOwned && landingPrompt.isOwner) {
+      handleLandingDialogAction('revoke');
+    }
+    
+    // A button (button 0) for close dialog
+    const aButtonPressed = gamepad.buttons[0].pressed;
+    if (aButtonPressed && !lastGamepadState.aButton) {
+      dismissDialog();
+    }
+    
+    // Update last state for dialog buttons
+    lastGamepadState.yButton = yButtonPressed;
+    lastGamepadState.bButton = bButtonPressed;
+    lastGamepadState.aButton = aButtonPressed;
+  }
+  
+  // Update last state
+  lastGamepadState.leftStickX = leftStickX;
+  lastGamepadState.leftTrigger = leftTrigger;
+  lastGamepadState.rightTrigger = rightTrigger;
+  lastGamepadState.xButton = xButtonPressed;
+  lastGamepadState.startButton = startButtonPressed;
+}
+
+// Listen for gamepad connection events
+window.addEventListener("gamepadconnected", (e) => {
+  console.log("Gamepad connected:", e.gamepad.id);
+  gamepadConnected = true;
+});
+
+window.addEventListener("gamepaddisconnected", (e) => {
+  console.log("Gamepad disconnected:", e.gamepad.id);
+  gamepadConnected = false;
+  // Reset inputs
+  input.rotate = 0;
+  input.thrust = false;
+  input.brake = false;
+  input.missile = false;
+});
+
 // ================= INPUT =================
 
 window.addEventListener("keydown", e => {
@@ -231,6 +375,11 @@ window.addEventListener("keydown", e => {
   if (e.key === "d") input.rotate = 1;
   if (e.key === "s") input.brake = true;
   if (e.key === "f") input.missile = true;
+  if (e.key === "q" || e.key === "Q") missilePreview = true;
+  if (e.key === "F1") {
+    e.preventDefault();
+    showControls = !showControls;
+  }
 });
 
 window.addEventListener("keyup", e => {
@@ -238,6 +387,7 @@ window.addEventListener("keyup", e => {
   if (e.key === "a" || e.key === "d") input.rotate = 0;
   if (e.key === "s") input.brake = false;
   if (e.key === "f") input.missile = false;
+  if (e.key === "q" || e.key === "Q") missilePreview = false;
 });
 
 // ================= NETWORK =================
@@ -366,12 +516,12 @@ function showLandingPrompt(prompt) {
   
   if (prompt.isOwned && prompt.isOwner) {
     content += `<div style="font-size:12px;margin-bottom:10px;">Your planet - Free refuel available</div>
-                <button id="btn-refuel-own" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#0f0;border:1px solid #0f0;cursor:pointer;">Refuel Free</button>
-                <button id="btn-revoke" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#f00;border:1px solid #f00;cursor:pointer;">Revoke</button>`;
+                <button id="btn-refuel-own" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#0f0;border:1px solid #0f0;cursor:pointer;">Refuel Free${gamepadConnected ? ' (Y)' : ''}</button>
+                <button id="btn-revoke" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#f00;border:1px solid #f00;cursor:pointer;">Revoke${gamepadConnected ? ' (B)' : ''}</button>`;
   } else if (prompt.isOwned && !prompt.isOwner) {
     content += `<div style="font-size:12px;margin-bottom:10px;">Owned by: ${prompt.owner} | Rent: $${prompt.rentPaid}</div>
                 <div style="font-size:12px;margin-bottom:10px;color:#ff0;">Credits: ${creditsDisplay}</div>
-                <button id="btn-refuel-paid" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#ff0;border:1px solid #ff0;cursor:pointer;">Refuel $${REFUEL_COST_PER_TANK}</button>`;
+                <button id="btn-refuel-paid" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#ff0;border:1px solid #ff0;cursor:pointer;">Refuel $${REFUEL_COST_PER_TANK}${gamepadConnected ? ' (Y)' : ''}</button>`;
   } else {
     const canClaim = credits >= prompt.claimCost;
     content += `<div style="font-size:12px;margin-bottom:10px;">Unclaimed - Claim for $${prompt.claimCost}</div>`;
@@ -381,10 +531,10 @@ function showLandingPrompt(prompt) {
     } else {
       content += `<div style="font-size:12px;color:#f00;margin-bottom:5px;">Need $${prompt.claimCost - Math.floor(credits)} more</div>`;
     }
-    content += `<button id="btn-refuel-paid" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#ff0;border:1px solid #ff0;cursor:pointer;">Refuel $${REFUEL_COST_PER_TANK}</button>`;
+    content += `<button id="btn-refuel-paid" style="width:100%;padding:5px;margin-bottom:5px;background:#000;color:#ff0;border:1px solid #ff0;cursor:pointer;">Refuel $${REFUEL_COST_PER_TANK}${gamepadConnected ? ' (Y)' : ''}</button>`;
   }
 
-  content += `<button id="btn-close" style="width:100%;padding:5px;background:#000;color:#aaa;border:1px solid #aaa;cursor:pointer;">Close</button>`;
+  content += `<button id="btn-close" style="width:100%;padding:5px;background:#000;color:#aaa;border:1px solid #aaa;cursor:pointer;">Close${gamepadConnected ? ' (A)' : ''}</button>`;
   dialog.innerHTML = content;
   document.body.appendChild(dialog);
 
@@ -443,6 +593,128 @@ function dismissDialog() {
   const dialog = document.getElementById("landing-dialog");
   if (dialog) dialog.remove();
   landingPrompt = null;
+}
+
+function handleLandingDialogAction(action) {
+  if (!landingPrompt || !socket) return;
+  
+  if (action === 'refuel') {
+    if (landingPrompt.isOwned && landingPrompt.isOwner) {
+      // Free refuel for owned planets
+      socket.send(JSON.stringify({
+        type: MSG_REFUEL,
+        payload: { amount: FREE_REFUEL_AMOUNT, isOwned: true }
+      }));
+    } else {
+      // Paid refuel
+      socket.send(JSON.stringify({
+        type: MSG_REFUEL,
+        payload: { amount: PAID_REFUEL_AMOUNT, isOwned: false }
+      }));
+    }
+    dismissDialog();
+  } else if (action === 'revoke' && landingPrompt.isOwned && landingPrompt.isOwner) {
+    socket.send(JSON.stringify({
+      type: MSG_REVOKE_PLANET,
+      payload: { planetId: landingPrompt.planetId }
+    }));
+    dismissDialog();
+  }
+}
+
+function drawControlsScreen() {
+  // Semi-transparent overlay
+  ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Title
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 24px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("CONTROLS", canvas.width / 2, 50);
+  
+  // Subtitle
+  ctx.font = "16px monospace";
+  ctx.fillText("Press F1 or Start to toggle", canvas.width / 2, 80);
+  
+  ctx.textAlign = "left";
+  ctx.font = "14px monospace";
+  
+  const leftX = 50;
+  const rightX = canvas.width / 2 + 50;
+  let yPos = 120;
+  const lineHeight = 25;
+  
+  // Movement Controls
+  ctx.fillStyle = "#4af";
+  ctx.fillText("MOVEMENT", leftX, yPos);
+  ctx.fillText("MOVEMENT", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillStyle = "#fff";
+  ctx.fillText("W - Thrust/Accelerate", leftX, yPos);
+  ctx.fillText("Right Trigger (RT) - Thrust", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillText("S - Brake", leftX, yPos);
+  ctx.fillText("Left Trigger (LT) - Brake", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillText("A/D - Turn Left/Right", leftX, yPos);
+  ctx.fillText("Left Stick - Steering", rightX, yPos);
+  yPos += lineHeight * 1.5;
+  
+  // Combat Controls
+  ctx.fillStyle = "#4af";
+  ctx.fillText("COMBAT", leftX, yPos);
+  ctx.fillText("COMBAT", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillStyle = "#fff";
+  ctx.fillText("F - Fire Missile", leftX, yPos);
+  ctx.fillText("X Button - Fire Missile", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillText("Q - Missile Preview", leftX, yPos);
+  ctx.fillText("Left Bumper (LB) - Preview", rightX, yPos);
+  yPos += lineHeight * 1.5;
+  
+  // Planet Interaction
+  ctx.fillStyle = "#4af";
+  ctx.fillText("PLANET INTERACTION", leftX, yPos);
+  ctx.fillText("PLANET INTERACTION", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillStyle = "#fff";
+  ctx.fillText("(When landed on planet)", leftX, yPos);
+  ctx.fillText("(When landed on planet)", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillText("Click buttons or:", leftX, yPos);
+  ctx.fillText("Y - Refuel", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillText("", leftX, yPos);
+  ctx.fillText("B - Revoke (if owned)", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillText("", leftX, yPos);
+  ctx.fillText("A - Close Dialog", rightX, yPos);
+  yPos += lineHeight * 1.5;
+  
+  // Other
+  ctx.fillStyle = "#4af";
+  ctx.fillText("OTHER", leftX, yPos);
+  ctx.fillText("OTHER", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillStyle = "#fff";
+  ctx.fillText("F1 - Toggle Controls", leftX, yPos);
+  ctx.fillText("Start Button - Toggle", rightX, yPos);
+  yPos += lineHeight;
+  
+  ctx.fillText("Chat: Click widget", leftX, yPos);
+  ctx.fillText("", rightX, yPos);
 }
 
 const shipImg = new Image();
@@ -509,6 +781,16 @@ function drawShip(p) {
     ctx.drawImage(shipImgThr, -size/2, -size/2, size, size);
   }
 
+  // Draw missile preview line when holding Q or LT
+  if (missilePreview) {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -size/2); // Start from front of ship
+    ctx.lineTo(0, -size/2 - 60); // Draw line forward (60 pixels length)
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 function drawMissile(m) {
@@ -573,27 +855,37 @@ function drawPlanet(p) {
 }
 
 const stars = [];
-for (let i = 0; i < 200; i++) {
-  stars.push({
-    x: Math.random() * 4000 - 2000,
-    y: Math.random() * 4000 - 2000,
-    size: Math.random() * 2
-  });
+const numStars = 200;
+const parallaxLayers = [
+  { factor: 0.1, count: Math.floor(numStars * 0.4), color: '#aaa', size: 1 }, // Far layer
+  { factor: 0.5, count: Math.floor(numStars * 0.4), color: '#ddd', size: 1.5 }, // Medium layer
+  { factor: 1.0, count: numStars - Math.floor(numStars * 0.8), color: '#fff', size: 2 }  // Close layer
+];
+
+for (const layer of parallaxLayers) {
+  for (let i = 0; i < layer.count; i++) {
+    stars.push({
+      x: Math.random() * 4000 - 2000,
+      y: Math.random() * 4000 - 2000,
+      layer: layer.factor,
+      color: layer.color,
+      size: Math.random() * layer.size + 0.5
+    });
+  }
 }
 // ================= MAIN LOOP =================
 
 function loop() {
+  // Update gamepad input
+  updateGamepadInput();
+  
   ctx.clearRect(0, 0, canvas.width, canvas.height); 
-  for (const s of stars) {
-    ctx.fillStyle = "white";
-    ctx.fillRect(s.x, s.y, s.size, s.size);
-  }
 
   // ---- HUD Panel (screen space) ----
   const hudX = 10;
   const hudY = 10;
   const hudW = 200;
-  const hudH = 140;
+  const hudH = 160;
   
   // HUD background panel
   ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
@@ -673,6 +965,17 @@ function loop() {
   ctx.fillStyle = "#ff0";
   ctx.fillText(`Fire: F (${MISSILE_FUEL_COST} fuel, $${MISSILE_CREDIT_COST})`, hudX + 10, yPos);
 
+  yPos += lineHeight;
+  
+  // Gamepad status
+  if (gamepadConnected) {
+    ctx.fillStyle = "#0f0";
+    ctx.fillText(`Gamepad: Connected`, hudX + 10, yPos);
+  } else {
+    ctx.fillStyle = "#666";
+    ctx.fillText(`Gamepad: None`, hudX + 10, yPos);
+  }
+
   if (players.length === 0) {
     requestAnimationFrame(loop);
     return;
@@ -688,6 +991,15 @@ function loop() {
     canvas.width / 2 - camTarget.x,
     canvas.height / 2 - camTarget.y
   );
+
+  // Draw parallax stars
+  for (const s of stars) {
+    const parallaxX = camTarget.x * (1 - s.layer);
+    const parallaxY = camTarget.y * (1 - s.layer);
+    ctx.fillStyle = s.color;
+    ctx.fillRect(s.x + parallaxX, s.y + parallaxY, s.size, s.size);
+  }
+
   for (const pl of planets) {
     drawPlanet(pl);
   }
@@ -703,6 +1015,11 @@ function loop() {
   }
 
   ctx.restore();
+
+  // Draw controls screen if enabled
+  if (showControls) {
+    drawControlsScreen();
+  }
 
   requestAnimationFrame(loop);
 }
