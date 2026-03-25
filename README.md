@@ -1,27 +1,81 @@
-# SPACE GAME
+# Space Game
 
-## Context
+## Overview
 
-This project was developed as part of the **CS2062 Laboratory Course** at **National Institute of Technology Andhra Pradesh**.
+A browser-based multiplayer space game. Each player controls a ship, manages fuel and credits, claims planets, pays rent on foreign planets, and uses missiles in combat.
 
-## Objective
+The project includes:
+- WebSocket server (Node.js + ws)
+- REST authentication server (Express, MongoDB)
+- Canvas-based client rendering
+- Physics (thrust, rotation, gravity, collision, landing)
+- Economy (claim planets, rent, refuel, missile costs)
+- Chat with profanity filtering
 
-Players will spawn into a world with their ships. Each player has resources FUEL and Credits. Player has to manage these resources and conquer planets. Visiting a planet will give the player option to claim it with some credits. Players visiting the already claimed planets has to pay the owner some amount and to stay on the planet and can refuel by paying some more credits. Players are also charged timed costs of maintaining their planets. The physics are realistic with implementation of Gravity and Simple concepts like Inertia. 
+## Folder structure
 
-## Project Goal
+- `client/` - front-end code
+  - `client.js` - entrypoint
+  - `state.js`, `auth.js`, `network.js`, `chat.js`, `input.js`, `gamepad.js`, `landing.js`, `render.js`
+  - `index.html`, assets
+- `server/` - back-end code
+  - `server.js` - entrypoint
+  - `connection.js`, `worldLoop.js`, `physics.js`, `messageHandlers.js`, `gameState.js`, `dbInit.js`
+  - `auth.js`, `db/`, `models/`
+- `shared/` - constants and message types used by both sides
 
-The project aims to:
+## Setup
 
-* Translate core course concepts into an executable solution
-* Demonstrate correctness of logic and methodology
-* Show structured program design and modular implementation
-* Validate theoretical assumptions through observable behaviour
-* Serve as a learning artifact for evaluation and discussion
+1. Install dependencies in root and subfolders if needed (optionally monorepo style):
 
-## Scope
+```bash
+cd client
+npm install
+cd ../server
+npm install
+```
 
-This repository is intended only for academic demonstration and evaluation purposes.
+2. Set up MongoDB. Use `.env` (example in project) with `MONGO_URI`.
 
-## Academic Note
+3. Start back end:
 
-This work is submitted solely as coursework for CS2062 at NIT Andhra Pradesh.
+```bash
+cd server
+node server.js
+```
+
+4. Start client (serve static files):
+
+```bash
+cd client
+npx http-server .  # or any static web server
+```
+
+5. Open browser at `http://localhost:8080` (or your server port) and log in.
+
+## Development workflow
+
+- Make code change
+- Restart server (`node server.js`)
+- Refresh browser client
+
+## Notes
+
+- Client and server now are modular and separated by concerns.
+- Entry points are minimal; core logic resides in modules that are easy to reason about.
+- No external build step is required if `type=module` is supported by your environment.
+
+## Quick commands
+
+Run server:
+```bash
+cd server
+node server.js
+```
+
+Run client via static host:
+```bash
+cd client
+npx http-server .
+```
+
