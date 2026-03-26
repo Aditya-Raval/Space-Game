@@ -4,7 +4,10 @@ import { Player } from './models/Player.js';
 import { handleAuth, handleMessage } from './messageHandlers.js';
 
 export function setupWebSocketServer(port = 8080) {
-  const wss = new WebSocketServer({ port });
+  const wss = new WebSocketServer({
+  port,
+  host: '0.0.0.0',
+  });
   console.log(`Server running on ws://localhost:${port}`);
 
   wss.on('connection', async ws => {

@@ -27,6 +27,7 @@ import {
 } from './shared/messageTypes.js';
 import { players, planets, missiles } from './gameState.js';
 import { Player } from './models/Player.js';
+import { Planet } from './models/Planet.js';
 
 
 export async function handleAuth(msg, ws) {
