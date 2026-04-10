@@ -16,7 +16,7 @@ import {
   MSG_FIRE_MISSILE,
   MSG_MISSILE_HIT
 } from "./shared/messageTypes.js";
-
+import { createLeaderboard, updateLeaderboard } from "./leaderboard.js";
 export function connectSocket(playerId) {
   state.socket = new WebSocket("ws://localhost:8080");
 
@@ -48,6 +48,7 @@ export function socketOnMessage(e) {
     const loginRoot = document.getElementById('login-root');
     if (loginRoot) loginRoot.style.display = 'none';
     createChatWidget();
+    createLeaderboard();
     appendChatMessage({ system: true, text: 'Chat ready!', ts: Date.now() });
   }
 
@@ -69,6 +70,7 @@ export function socketOnMessage(e) {
       state.myCredits = myPlayer.credits;
       state.myName = myPlayer.username || state.myName;
     }
+    updateLeaderboard();
   }
 
   if (msg.type === MSG_LANDING_PROMPT) {
