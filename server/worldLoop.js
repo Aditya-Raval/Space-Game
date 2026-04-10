@@ -106,6 +106,7 @@ export function broadcastState(wss) {
   const snapshot = {
     players: Array.from(players.values()).map(p => ({
       id: p.id,
+      username : p.username,
       x: p.x,
       y: p.y,
       rot: p.rot,
